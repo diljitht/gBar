@@ -160,7 +160,7 @@ First, find where the data is located for gBar. Possible locations:
  - ~/.local/share/gBar
  - If you cloned this repository locally: Inside css/
 
- Copy the scss and css files from within the data direction into ~/.config/gBar. e.g.:
+ Copy the scss and css files from within the data directory into ~/.config/gBar. e.g.:
  ```
  mkdir ~/.config/gBar/
  cp /usr/local/share/gBar/* ~/.config/gBar/
@@ -168,7 +168,7 @@ First, find where the data is located for gBar. Possible locations:
  This will override the default behaviour. If you have sass installed, you can modify the scss file and then regenerate the css file accordingly. Else modify the css file directly.
 
 ### The margins of the bar are inconsistent/messed up / Custom CSS broke.
-If you have a custom style.[s]css, make sure that the margins/names/... are the same as the ones found in ```style/style.[s]css```.\
+If you have a custom style.[s]css, make sure that the margins/names/... are the same as the ones found in ```css/style.scss``` / ```css/style.css```.\
 If you've checked the css against upstream gBar and the issue persists, please [open an issue](https://github.com/scorpion-26/gBar/issues/new/choose).\
 Major (breaking) changes to the css:
  - [f78758c](https://github.com/scorpion-26/gBar/commit/f78758c4eedb022ae49fbecf2f2505f9672d0b9d): Margins are no longer used in the default css. If you didn't play around with margins, you can safely remove them from your css.\
@@ -182,7 +182,7 @@ This happens, when you kill the widget before it closes properly (Automatically 
 See *Configuration for your system*
 
 ### The icons are not showing!
-Please install a Nerd Font from https://www.nerdfonts.com, and change style.css/style.scss accordingly (Refer to 'I want to customize the colors' for that). You _will_ need a Nerd Font with version 2.3.0 or newer (For more details see [this comment](https://github.com/scorpion-26/gBar/issues/5#issuecomment-1442037005))
+Please install a Nerd Font from https://www.nerdfonts.com, and change css/style.css / css/style.scss accordingly (Refer to 'I want to customize the colors' for that). You _will_ need a Nerd Font with version 2.3.0 or newer (For more details see [this comment](https://github.com/scorpion-26/gBar/issues/5#issuecomment-1442037005))
 
 ### The tray doesn't show
 Some apps sometimes don't actively query for tray applications. A fix for this is to start gBar before the tray app
@@ -190,5 +190,5 @@ If it still doesn't show, please open an issue with your application.
 The tray icons are confirmed to work with Discord, Telegram, OBS, Steam and KeePassXC
 
 ### Clicking on the tray opens a glitchy transparent menu
-~This is semi-intentional and a known bug (See https://github.com/scorpion-26/gBar/pull/12#issuecomment-1529143790 for an explanation). You can make it opaque by setting the background-color property of .popup in style.css/style.scss~\
+~This is semi-intentional and a known bug (See https://github.com/scorpion-26/gBar/pull/12#issuecomment-1529143790 for an explanation). You can make it opaque by setting the background-color property of .popup in css/style.css / css/style.scss~\
 As of [bc0281c](https://github.com/scorpion-26/gBar/commit/bc0281ca5321cb6e72ab6d295c790ae10d7eec7e) this is now fixed! For things to look properly you may want to update your css (Specifically the selectors ```.popup``` and ```menu```)
