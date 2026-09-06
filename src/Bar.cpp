@@ -478,10 +478,12 @@ namespace Bar
             size_t numSpecial = System::GetNumSpecialWorkspaces();
             if (specialWorkspaces.size() != numSpecial)
             {
-                // Remove previously created special workspace buttons
-                while (box.GetWidgets().size() > numSpecial)
+                // Rebuild the special workspace buttons from scratch. Removing all
+                // existing children first is safer than only trimming the front,
+                // which could leave stale buttons (with old labels) behind.
+                while (box.GetWidgets().size() > 0)
                 {
-                    box.RemoveChild((size_t)0);
+                    box.RemoveChild(box.GetWidgets().size() - 1);
                 }
                 specialWorkspaces.clear();
                 for (size_t i = 0; i < numSpecial; i++)
