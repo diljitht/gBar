@@ -1,4 +1,5 @@
 # Maintainer: diljitht <t dot diljith  at gmail dot com>
+# Fork of gBar by scorpion-26, original: https://github.com/scorpion-26/gBar
 
 _pkgname=gBar
 pkgname=gbar-git
