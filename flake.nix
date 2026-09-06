@@ -28,7 +28,7 @@
           bluez
           gtk3
           gtk-layer-shell
-          libpulseaudio
+          pipewire
           libdbusmenu-gtk3
           libsass
         ];

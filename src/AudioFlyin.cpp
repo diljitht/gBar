@@ -126,7 +126,7 @@ namespace AudioFlyin
         else if (DynCtx::type == Type::Microphone)
         {
             icon->SetClass("mic-icon");
-            icon->SetText(Config::Get().speakerMutedIcon);
+            icon->SetText(Config::Get().micHighIcon);
         }
 
         DynCtx::icon = icon.get();

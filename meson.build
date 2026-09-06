@@ -35,14 +35,15 @@ wlr_foreign_toplevel_header = custom_target('generate-wlr-foreign-toplevel-heade
 gtk = dependency('gtk+-3.0')
 gtk_layer_shell = dependency('gtk-layer-shell-0')
 
-pulse = dependency('libpulse')
+pipewire = dependency('libpipewire-0.3')
+spa = dependency('libspa-0.2')
 
 
 headers = [
   'src/Common.h',
   'src/Log.h',
   'src/System.h',
-  'src/PulseAudio.h',
+  'src/PipeWire.h',
   'src/Widget.h',
   'src/Window.h',
   'src/Wayland.h',
@@ -70,7 +71,7 @@ sources = [
    'src/SNI.cpp',
    ]
 
-dependencies = [gtk, gtk_layer_shell, pulse, wayland_client]
+dependencies = [gtk, gtk_layer_shell, pipewire, spa, wayland_client]
 
 if get_option('WithHyprland')
   add_global_arguments('-DWITH_HYPRLAND', language: 'cpp')

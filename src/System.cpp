@@ -1,8 +1,7 @@
 #include "System.h"
 #include "Common.h"
-#include "NvidiaGPU.h"
 #include "AMDGPU.h"
-#include "PulseAudio.h"
+#include "PipeWire.h"
 #include "Workspaces.h"
 #include "Config.h"
 #include "SNI.h"
@@ -17,8 +16,6 @@
 #include <thread>
 
 #include <gio/gio.h>
-
-#include <pulse/pulseaudio.h>
 
 #include <dlfcn.h>
 #include <sys/statvfs.h>
@@ -473,24 +470,24 @@ namespace System
 
     AudioInfo GetAudioInfo()
     {
-        return PulseAudio::GetInfo();
+        return PipeWireAudio::GetInfo();
     }
     void SetVolumeSink(double volume)
     {
-        PulseAudio::SetVolumeSink(volume);
+        PipeWireAudio::SetVolumeSink(volume);
     }
     void SetVolumeSource(double volume)
     {
-        PulseAudio::SetVolumeSource(volume);
+        PipeWireAudio::SetVolumeSource(volume);
     }
 
     void SetMutedSink(bool muted)
     {
-        PulseAudio::SetMutedSink(muted);
+        PipeWireAudio::SetMutedSink(muted);
     }
     void SetMutedSource(bool muted)
     {
-        PulseAudio::SetMutedSource(muted);
+        PipeWireAudio::SetMutedSource(muted);
     }
 
 #ifdef WITH_WORKSPACES
@@ -703,10 +700,6 @@ namespace System
 
         Wayland::Init();
 
-#ifdef WITH_NVIDIA
-        NvidiaGPU::Init();
-#endif
-
 #ifdef WITH_AMD
         AMDGPU::Init();
 #endif
@@ -719,7 +712,7 @@ namespace System
         InitBluetooth();
 #endif
 
-        PulseAudio::Init();
+        PipeWireAudio::Init();
 
 #ifdef WITH_SNI
         SNI::Init();
@@ -729,10 +722,7 @@ namespace System
     }
     void FreeResources()
     {
-#ifdef WITH_NVIDIA
-        NvidiaGPU::Shutdown();
-#endif
-        PulseAudio::Shutdown();
+        PipeWireAudio::Shutdown();
 
 #ifdef WITH_WORKSPACES
         Workspaces::Shutdown();

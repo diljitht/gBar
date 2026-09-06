@@ -345,13 +345,13 @@ namespace Bar
                 micVolume);
         }
 
-        void OnToggleSink(Button& button)
+        void OnToggleSink(UNUSED Button& button)
         {
             System::AudioInfo info = System::GetAudioInfo();
             System::SetMutedSink(!info.sinkMuted);
         }
 
-        void OnToggleSource(Button& button)
+        void OnToggleSource(UNUSED Button& button)
         {
             System::AudioInfo info = System::GetAudioInfo();
             System::SetMutedSource(!info.sourceMuted);
@@ -660,13 +660,13 @@ namespace Bar
                 {
                 case AudioType::Input:
                     icon->SetClass("mic-icon");
-                    icon->SetText(Config::Get().speakerHighIcon);
+                    icon->SetText(Config::Get().micHighIcon);
                     icon->OnClick(DynCtx::OnToggleSource);
                     DynCtx::micIcon = icon.get();
                     break;
                 case AudioType::Output:
                     icon->SetClass("audio-icon");
-                    icon->SetText(Config::Get().micHighIcon);
+                    icon->SetText(Config::Get().speakerHighIcon);
                     icon->OnClick(DynCtx::OnToggleSink);
                     if (!RotatedIcons())
                         Utils::SetTransform(*icon, {-1, true, Alignment::Fill, 0, 6});
