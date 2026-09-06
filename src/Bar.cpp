@@ -472,15 +472,16 @@ namespace Bar
                 workspaces[i]->SetText(System::GetWorkspaceSymbol(i));
             }
 
-            // Hyprland special (scratchpad) workspaces are rendered as extra, dynamic
-            // buttons after the regular ones. They appear/disappear as they're created.
+            // Hyprland special (scratchpad) workspaces live in a dedicated box (the
+            // one this timer is attached to), separate from the regular workspace
+            // buttons. They appear/disappear as the scratchpads are created/removed.
             size_t numSpecial = System::GetNumSpecialWorkspaces();
             if (specialWorkspaces.size() != numSpecial)
             {
                 // Remove previously created special workspace buttons
-                while (box.GetWidgets().size() > Config::Get().numWorkspaces)
+                while (box.GetWidgets().size() > numSpecial)
                 {
-                    box.RemoveChild(Config::Get().numWorkspaces);
+                    box.RemoveChild((size_t)0);
                 }
                 specialWorkspaces.clear();
                 for (size_t i = 0; i < numSpecial; i++)
@@ -1146,28 +1147,45 @@ namespace Bar
         eventBox->SetScrollFn(DynCtx::ScrollWorkspaces);
         Utils::SetTransform(*eventBox, {-1, false, SideToAlignment(side)});
         {
-            auto box = Widget::Create<Box>();
-            box->SetSpacing({8, true});
-            box->AddClass("workspaces");
-            box->AddClass("widget");
-            box->SetOrientation(Utils::GetOrientation());
+            auto outerBox = Widget::Create<Box>();
+            outerBox->SetSpacing({8, false});
+            outerBox->AddClass("widget");
+            outerBox->SetOrientation(Utils::GetOrientation());
             {
-                DynCtx::workspaces.resize(Config::Get().numWorkspaces);
-                for (size_t i = 0; i < DynCtx::workspaces.size(); i++)
+                auto box = Widget::Create<Box>();
+                box->SetSpacing({8, true});
+                box->AddClass("workspaces");
+                box->AddClass("widget");
+                box->SetOrientation(Utils::GetOrientation());
                 {
-                    auto workspace = Widget::Create<Button>();
-                    Utils::SetTransform(*workspace, {8, false, Alignment::Fill});
-                    workspace->OnClick(
-                        [i](Button&)
-                        {
-                            System::GotoWorkspace((uint32_t)i + 1);
-                        });
-                    DynCtx::workspaces[i] = workspace.get();
-                    box->AddChild(std::move(workspace));
+                    DynCtx::workspaces.resize(Config::Get().numWorkspaces);
+                    for (size_t i = 0; i < DynCtx::workspaces.size(); i++)
+                    {
+                        auto workspace = Widget::Create<Button>();
+                        Utils::SetTransform(*workspace, {8, false, Alignment::Fill});
+                        workspace->OnClick(
+                            [i](Button&)
+                            {
+                                System::GotoWorkspace((uint32_t)i + 1);
+                            });
+                        DynCtx::workspaces[i] = workspace.get();
+                        box->AddChild(std::move(workspace));
+                    }
                 }
+                outerBox->AddChild(std::move(box));
+
+                // Special (scratchpad) workspaces are kept in their own box so the
+                // regular workspace buttons stay evenly sized regardless of the
+                // (wider text) special workspace buttons.
+                auto specialBox = Widget::Create<Box>();
+                specialBox->SetSpacing({8, false});
+                specialBox->AddClass("workspaces-special");
+                specialBox->AddClass("widget");
+                specialBox->SetOrientation(Utils::GetOrientation());
+                specialBox->AddTimer<Box>(DynCtx::UpdateWorkspaces, DynCtx::updateTimeFast);
+                outerBox->AddChild(std::move(specialBox));
             }
-            box->AddTimer<Box>(DynCtx::UpdateWorkspaces, DynCtx::updateTimeFast);
-            eventBox->AddChild(std::move(box));
+            eventBox->AddChild(std::move(outerBox));
         }
         parent.AddChild(std::move(eventBox));
     }

@@ -297,7 +297,7 @@ namespace Workspaces
                 size_t specialParseIdx = monitors.find("special workspace: ", begMonNum);
                 if (specialParseIdx != std::string::npos && (nextMon == std::string::npos || specialParseIdx < nextMon))
                 {
-                    size_t begSpecialId = monitors.find(' ', specialParseIdx) + 1;
+                    size_t begSpecialId = specialParseIdx + std::string("special workspace: ").size();
                     size_t endSpecialId = monitors.find(' ', begSpecialId);
                     int32_t specialId = std::atoi(monitors.substr(begSpecialId, endSpecialId - begSpecialId).c_str());
                     if (mon == monitor)
