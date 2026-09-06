@@ -260,6 +260,7 @@ void Config::Load(const std::string& overrideConfigLocation)
         AddConfigVar("ExitCommand", config.exitCommand, lineView, foundProperty);
         AddConfigVar("BatteryFolder", config.batteryFolder, lineView, foundProperty);
         AddConfigVar("DefaultWorkspaceSymbol", config.defaultWorkspaceSymbol, lineView, foundProperty);
+        AddConfigVar("SpecialWorkspaceLabel", config.specialWorkspaceLabel, lineView, foundProperty);
         AddConfigVar("DateTimeStyle", config.dateTimeStyle, lineView, foundProperty);
         AddConfigVar("DateTimeStyleFull", config.dateTimeStyleFull, lineView, foundProperty);
         AddConfigVar("DateTimeLocale", config.dateTimeLocale, lineView, foundProperty);
