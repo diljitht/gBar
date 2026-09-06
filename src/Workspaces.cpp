@@ -183,6 +183,16 @@ namespace Workspaces
         static std::vector<System::WorkspaceStatus> workspaceStati;
         static uint32_t maxUsedWorkspace = 0;
 
+        struct SpecialWorkspace
+        {
+            int32_t id;
+            std::string name; // Without the "special:" prefix
+        };
+        // Hyprland special (scratchpad) workspaces
+        static std::vector<SpecialWorkspace> specialWorkspaces;
+        // The id of the special workspace currently shown on the polled monitor (0 if none)
+        static int32_t activeSpecialWorkspaceId = 0;
+
         void PollStatus(const std::string& monitor, uint32_t numWorkspaces)
         {
             if (RuntimeConfig::Get().hasWorkspaces == false)
@@ -193,6 +203,8 @@ namespace Workspaces
             workspaceStati.clear();
             workspaceStati.resize(numWorkspaces, System::WorkspaceStatus::Dead);
             maxUsedWorkspace = 0;
+            specialWorkspaces.clear();
+            activeSpecialWorkspaceId = 0;
 
             size_t parseIdx = 0;
             // First parse workspaces
@@ -211,6 +223,20 @@ namespace Workspaces
                     // WS is at least inactive
                     workspaceStati[wsId - 1] = System::WorkspaceStatus::Inactive;
                 }
+                // Special (scratchpad) workspaces have negative ids, e.g. -98 (special:gbartest)
+                else if (wsId <= -1)
+                {
+                    size_t begName = endWSNum + 1;
+                    size_t endName = workspaces.find(')', begName);
+                    std::string wsName = endName == std::string::npos
+                        ? ""
+                        : workspaces.substr(begName + 1, endName - begName - 1);
+                    if (wsName.compare(0, 8, "special:") == 0)
+                    {
+                        wsName = wsName.substr(8);
+                    }
+                    specialWorkspaces.push_back({wsId, wsName});
+                }
                 // Update maxUsedWorkspace
                 if (wsId > 0 && (uint32_t)wsId > maxUsedWorkspace)
                     maxUsedWorkspace = wsId;
@@ -227,6 +253,7 @@ namespace Workspaces
                 size_t begMonNum = monitors.find(' ', parseIdx) + 1;
                 size_t endMonNum = monitors.find(' ', begMonNum);
                 std::string mon = monitors.substr(begMonNum, endMonNum - begMonNum);
+                size_t nextMon = monitors.find("Monitor ", begMonNum);
 
                 // Parse active workspace
                 parseIdx = monitors.find("active workspace: ", parseIdx);
@@ -264,6 +291,20 @@ namespace Workspaces
                 // Update maxUsedWorkspace
                 if (wsId > 0 && (uint32_t)wsId > maxUsedWorkspace)
                     maxUsedWorkspace = wsId;
+
+                // Parse which special workspace is shown on this monitor (Hyprland scratchpad)
+                // Format: special workspace: <id> (<name>)
+                size_t specialParseIdx = monitors.find("special workspace: ", begMonNum);
+                if (specialParseIdx != std::string::npos && (nextMon == std::string::npos || specialParseIdx < nextMon))
+                {
+                    size_t begSpecialId = monitors.find(' ', specialParseIdx) + 1;
+                    size_t endSpecialId = monitors.find(' ', begSpecialId);
+                    int32_t specialId = std::atoi(monitors.substr(begSpecialId, endSpecialId - begSpecialId).c_str());
+                    if (mon == monitor)
+                    {
+                        activeSpecialWorkspaceId = specialId;
+                    }
+                }
             }
         }
 
@@ -281,6 +322,35 @@ namespace Workspaces
         uint32_t GetMaxUsedWorkspace()
         {
             return maxUsedWorkspace;
+        }
+
+        size_t GetNumSpecialWorkspaces()
+        {
+            return specialWorkspaces.size();
+        }
+
+        System::WorkspaceStatus GetSpecialWorkspaceStatus(uint32_t index)
+        {
+            if (RuntimeConfig::Get().hasWorkspaces == false)
+            {
+                return System::WorkspaceStatus::Dead;
+            }
+            if (index >= specialWorkspaces.size())
+            {
+                return System::WorkspaceStatus::Dead;
+            }
+            return specialWorkspaces[index].id == activeSpecialWorkspaceId
+                ? System::WorkspaceStatus::SpecialActive
+                : System::WorkspaceStatus::SpecialInactive;
+        }
+
+        std::string GetSpecialWorkspaceName(uint32_t index)
+        {
+            if (index >= specialWorkspaces.size())
+            {
+                return "";
+            }
+            return specialWorkspaces[index].name;
         }
     }
 #endif
@@ -328,6 +398,39 @@ namespace Workspaces
         }
 #endif
         return Wayland::GetMaxUsedWorkspace();
+    }
+
+    size_t GetNumSpecialWorkspaces()
+    {
+#ifdef WITH_HYPRLAND
+        if (Config::Get().useHyprlandIPC)
+        {
+            return Hyprland::GetNumSpecialWorkspaces();
+        }
+#endif
+        return 0;
+    }
+
+    System::WorkspaceStatus GetSpecialWorkspaceStatus(uint32_t index)
+    {
+#ifdef WITH_HYPRLAND
+        if (Config::Get().useHyprlandIPC)
+        {
+            return Hyprland::GetSpecialWorkspaceStatus(index);
+        }
+#endif
+        return System::WorkspaceStatus::Dead;
+    }
+
+    std::string GetSpecialWorkspaceName(uint32_t index)
+    {
+#ifdef WITH_HYPRLAND
+        if (Config::Get().useHyprlandIPC)
+        {
+            return Hyprland::GetSpecialWorkspaceName(index);
+        }
+#endif
+        return "";
     }
 
     void Shutdown() {}

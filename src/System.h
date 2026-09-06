@@ -95,7 +95,9 @@ namespace System
         Inactive,
         Visible,
         Current,
-        Active
+        Active,
+        SpecialActive,
+        SpecialInactive
     };
     void PollWorkspaces(const std::string& monitor, uint32_t numWorkspaces);
     WorkspaceStatus GetWorkspaceStatus(uint32_t workspace);
@@ -104,6 +106,12 @@ namespace System
     // direction: + or -
     void GotoNextWorkspace(char direction);
     std::string GetWorkspaceSymbol(int index);
+
+    // Hyprland special (scratchpad) workspaces. Unsupported elsewhere.
+    size_t GetNumSpecialWorkspaces();
+    WorkspaceStatus GetSpecialWorkspaceStatus(uint32_t index);
+    std::string GetSpecialWorkspaceName(uint32_t index);
+    void ToggleSpecialWorkspace(uint32_t index);
 #endif
 
     // Bytes per second upload. dx is time since last call. Will always return 0 on first run

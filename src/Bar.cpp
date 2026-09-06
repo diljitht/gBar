@@ -447,7 +447,8 @@ namespace Bar
 
 #ifdef WITH_WORKSPACES
         static std::vector<Button*> workspaces;
-        TimerResult UpdateWorkspaces(Box&)
+        static std::vector<Button*> specialWorkspaces;
+        TimerResult UpdateWorkspaces(Box& box)
         {
             System::PollWorkspaces(monitor, workspaces.size());
             uint32_t maxWorkspace = Config::Get().workspaceHideUnused ? System::GetMaxUsedWorkspace() : 0;
@@ -466,8 +467,42 @@ namespace Bar
                 case System::WorkspaceStatus::Visible: workspaces[i]->SetClass("ws-visible"); break;
                 case System::WorkspaceStatus::Current: workspaces[i]->SetClass("ws-current"); break;
                 case System::WorkspaceStatus::Active: workspaces[i]->SetClass("ws-active"); break;
+                default: break;
                 }
                 workspaces[i]->SetText(System::GetWorkspaceSymbol(i));
+            }
+
+            // Hyprland special (scratchpad) workspaces are rendered as extra, dynamic
+            // buttons after the regular ones. They appear/disappear as they're created.
+            size_t numSpecial = System::GetNumSpecialWorkspaces();
+            if (specialWorkspaces.size() != numSpecial)
+            {
+                // Remove previously created special workspace buttons
+                while (box.GetWidgets().size() > Config::Get().numWorkspaces)
+                {
+                    box.RemoveChild(Config::Get().numWorkspaces);
+                }
+                specialWorkspaces.clear();
+                for (size_t i = 0; i < numSpecial; i++)
+                {
+                    auto special = Widget::Create<Button>();
+                    Utils::SetTransform(*special, {8, false, Alignment::Fill});
+                    special->OnClick(
+                        [i](Button&)
+                        {
+                            System::ToggleSpecialWorkspace((uint32_t)i);
+                        });
+                    specialWorkspaces.push_back(special.get());
+                    box.AddChild(std::move(special));
+                }
+            }
+            for (size_t i = 0; i < specialWorkspaces.size(); i++)
+            {
+                if (System::GetSpecialWorkspaceStatus((uint32_t)i) == System::WorkspaceStatus::SpecialActive)
+                    specialWorkspaces[i]->SetClass("ws-special-active");
+                else
+                    specialWorkspaces[i]->SetClass("ws-special-inactive");
+                specialWorkspaces[i]->SetText(System::GetSpecialWorkspaceName((uint32_t)i));
             }
             return TimerResult::Ok;
         }

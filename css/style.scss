@@ -341,6 +341,14 @@ highlight {
     color: $green;
     font-size: 14px;
 }
+.ws-special-inactive {
+    color: $purple;
+    font-size: 14px;
+}
+.ws-special-active {
+    color: $orange;
+    font-size: 14px;
+}
 
 // Bluetooth Widget
 @keyframes connectanim {

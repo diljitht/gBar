@@ -309,6 +309,16 @@ highlight {
   font-size: 14px;
 }
 
+.ws-special-inactive {
+  color: #bd93f9;
+  font-size: 14px;
+}
+
+.ws-special-active {
+  color: #ffb86c;
+  font-size: 14px;
+}
+
 @keyframes connectanim {
   from {
     background-image: radial-gradient(circle farthest-side at center, #1793D1 0%, transparent 0%, transparent 100%);

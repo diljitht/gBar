@@ -503,6 +503,22 @@ namespace System
 
         return it->second + " ";
     }
+    size_t GetNumSpecialWorkspaces()
+    {
+        return Workspaces::GetNumSpecialWorkspaces();
+    }
+    WorkspaceStatus GetSpecialWorkspaceStatus(uint32_t index)
+    {
+        return Workspaces::GetSpecialWorkspaceStatus(index);
+    }
+    std::string GetSpecialWorkspaceName(uint32_t index)
+    {
+        return Workspaces::GetSpecialWorkspaceName(index);
+    }
+    void ToggleSpecialWorkspace(uint32_t index)
+    {
+        return Workspaces::ToggleSpecialWorkspace(index);
+    }
 #endif
 
     void CheckNetwork()
