@@ -36,7 +36,7 @@ Many thanks to the original author for creating such a great project.
     ninja -C build && sudo ninja -C build install
     ```
 
-## Building and installation (AUR)
+## Building and installation (Arch Linux)
 For Arch systems, use the PKGBUILD file and install it with `makepkg -si`
 
 ## Running gBar
