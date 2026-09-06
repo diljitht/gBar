@@ -1,7 +1,11 @@
 # gBar
-My personal blazingly fast and efficient status bar + widgets, in case anyone finds a use for it.
+A blazingly fast and efficient status bar + widgets, in case anyone finds a use for it.
 
 *gBar: **G**TK **Bar***
+
+## Credits
+gBar is a fork of the original [gBar](https://github.com/scorpion-26/gBar) by [scorpion-26](https://github.com/scorpion-26).
+Many thanks to the original author for creating such a great project.
 
 ## Prerequisites 
 *If you don't have the optional dependencies, some features are not available.*
@@ -19,7 +23,7 @@ My personal blazingly fast and efficient status bar + widgets, in case anyone fi
 ## Building and installation (Manually)
 1. Clone gBar
     ```
-    git clone https://github.com/scorpion-26/gBar
+    git clone https://github.com/diljitht/gBar
     ```
 2. Configure with meson
     
@@ -132,19 +136,19 @@ For more examples on how to use the gBar API, you can have a look at the built-i
 ## FAQ
 ### There are already many GTK bars out there, why not use them?
 - Waybar: 
-Great performance, though limited styling(Almost no dynamic sliders, revealers, ...) and (at least for me) buggy css.
+Great performance, though limited styling(Almost no dynamic sliders, revealers, ...) and buggy css.
 - eww: 
 Really solid project with many great customization options. There is one problem though: Performance.\
 Due to the way eww configuration is set up, for each dynamic variable (the number of them quickly grows) you need a shell command which opens a process. 
 This became quickly a bottleneck, where the bar took up 10% of the CPU-time due to the creation of many processes all the time (without even considering the workspace widget).
-gBar implements all of the information gathering(CPU, RAM, GPU, Disk, ...) in native C++ code, which is WAY faster. In fact, gBar was meant to be a fast replacement/alternative for eww for me.
+gBar implements all of the information gathering(CPU, RAM, GPU, Disk, ...) in native C++ code, which is WAY faster. In fact, gBar was meant to be a fast replacement/alternative for eww.
 
-And lastly: Implementing it myself is fun and a great excuse to learn something new!
+And lastly: Implementing it was a great excuse to learn something new!
 
 ### Can you implement feature XYZ? / I've found a bug. Can you fix it?
-This project is meant to be for my personal use, though I want it to be easily used by others without bugs or a complicated setup. This means the following:
- -  If you found a bug, please [open an issue](https://github.com/scorpion-26/gBar/issues/new/choose) and I'll try to fix it as quickly as I can.
- -  If you're missing a particular feature, please [open an issue](https://github.com/scorpion-26/gBar/issues/new/choose) as well and I'll see what I can do, although I can't guarantee anything. Small requests or features I'll find useful too will probably be implemented in a timely fashion though.
+This project is meant to be easily used by others without bugs or a complicated setup. This means the following:
+ -  If you found a bug, please [open an issue](https://github.com/diljitht/gBar/issues/new/choose) and it will be fixed as quickly as possible.
+ -  If you're missing a particular feature, please [open an issue](https://github.com/diljitht/gBar/issues/new/choose) as well; although nothing is guaranteed, small requests or useful features will probably be implemented in a timely fashion.
 
 
 ### What scheme are you using?
@@ -180,7 +184,7 @@ This happens, when you kill the widget before it closes properly (Automatically 
 See *Configuration for your system*
 
 ### The icons are not showing!
-Please install a Nerd Font from https://www.nerdfonts.com (I use Caskaydia Cove NF), and change style.css/style.scss accordingly (Refer to 'I want to customize the colors' for that). You _will_ need a Nerd Font with version 2.3.0 or newer (For more details see [this comment](https://github.com/scorpion-26/gBar/issues/5#issuecomment-1442037005))
+Please install a Nerd Font from https://www.nerdfonts.com, and change style.css/style.scss accordingly (Refer to 'I want to customize the colors' for that). You _will_ need a Nerd Font with version 2.3.0 or newer (For more details see [this comment](https://github.com/scorpion-26/gBar/issues/5#issuecomment-1442037005))
 
 ### The tray doesn't show
 Some apps sometimes don't actively query for tray applications. A fix for this is to start gBar before the tray app
