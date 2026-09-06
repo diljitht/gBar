@@ -64,9 +64,6 @@ DiskPartition: /
 # The default symbol for the workspaces
 DefaultWorkspaceSymbol: 
 
-# The label shown for Hyprland special (scratchpad) workspaces
-#SpecialWorkspaceLabel: scratchpad
-
 # All of the icons that can be modified.
 # Please note that some icons require a space ("\s") (e.g. default ShutdownIcon)
 ShutdownIcon: \s

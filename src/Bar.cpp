@@ -503,7 +503,7 @@ namespace Bar
                     specialWorkspaces[i]->SetClass("ws-special-active");
                 else
                     specialWorkspaces[i]->SetClass("ws-special-inactive");
-                specialWorkspaces[i]->SetText(Config::Get().specialWorkspaceLabel);
+                specialWorkspaces[i]->SetText(System::GetSpecialWorkspaceName((uint32_t)i));
             }
             return TimerResult::Ok;
         }

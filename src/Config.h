@@ -23,7 +23,6 @@ public:
     std::string batteryFolder = ""; // this can be BAT0, BAT1, etc. Usually in /sys/class/power_supply
     std::map<uint32_t, std::string> workspaceSymbols;
     std::string defaultWorkspaceSymbol = "";
-    std::string specialWorkspaceLabel = "scratchpad";
     std::string dateTimeStyle = "%a %D - %H:%M:%S %Z";          // A sane default
     std::string dateTimeStyleFull = "%a %D - %H:%M:%S %Z";      // Shown on hover when timeFullOnHover is set
     std::string dateTimeLocale = "";                            // use system locale
