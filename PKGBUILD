@@ -12,7 +12,7 @@ url='https://github.com/diljitht/gBar'
 source=("$_pkgname::git+$url")
 license=('MIT')
 provides=("gbar=$pkgver")
-conflicts=('gbar')
+conflicts=('gbar-git')
 depends=('cairo'
          'gdk-pixbuf2'
          'glib2'
