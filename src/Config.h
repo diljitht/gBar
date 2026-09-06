@@ -52,7 +52,7 @@ public:
     // TODO: BluetoothDevices Refresh and close icons
 
     // Script that returns how many packages are out-of-date. The script should only print a number!
-    // See data/update.sh for a human-readable version
+    // See scripts/update.sh for a human-readable version
     std::string checkPackagesCommand =
         "p=\"$(checkupdates)\"; e=$?; if [ $e -eq 127 ] ; then exit 127; fi; if [ $e -eq 2 ] ; then echo \"0\" && exit 0; fi; echo \"$p\" | wc -l";
 

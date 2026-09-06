@@ -111,7 +111,7 @@ Copy the example config (found under data/config) into ~/.config/gBar/config and
 ## Plugins
 gBar utilizes a plugin system for custom widgets anyone can create without modifying the source code.
 Plugins are native shared-libraries, which need to be placed inside ```~/.local/lib/gBar```, ```/usr/lib/gBar``` or ```/usr/local/lib/gBar```.
-Inside example/ there is an example plugin setup. To build and run it, run the following commands inside the example directory:
+Inside examples/ there is an example plugin setup. To build and run it, run the following commands inside the examples directory:
 
 ```
 meson setup build -Dprefix=~/.local
