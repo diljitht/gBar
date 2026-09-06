@@ -343,11 +343,13 @@ highlight {
 }
 .ws-special-inactive {
     color: $purple;
-    font-size: 14px;
+    font-size: $textsize;
+    font-weight: bold;
 }
 .ws-special-active {
-    color: $orange;
-    font-size: 14px;
+    color: $purple;
+    font-size: $textsize;
+    font-weight: bold;
 }
 
 // Bluetooth Widget
