@@ -7,6 +7,65 @@ A blazingly fast and efficient status bar + widgets, in case anyone finds a use 
 gBar is a fork of the original [gBar](https://github.com/scorpion-26/gBar) by [scorpion-26](https://github.com/scorpion-26).
 Many thanks to the original author for creating such a great project.
 
+## Differences from upstream
+
+This comparison is based on this fork at [`e5d5af6`](https://github.com/diljitht/gBar/commit/e5d5af6)
+and the original project's `master` at [`03bedc7`](https://github.com/scorpion-26/gBar/commit/03bedc7471add061fb15e0ca1c9d2f729b8c5d7b),
+checked on September 6, 2026. It describes code differences, not a guarantee of compatibility with every compositor or device.
+
+### Features and behavior
+
+| Area | Original scorpion-26/gBar | This fork |
+| --- | --- | --- |
+| Clock | One configurable date/time label. | Optional animated additional date/time label on hover, while keeping the normal clock visible. Enable `TimeFullOnHover` and configure `DateTimeStyleFull`. |
+| Hyprland scratchpads | Regular workspace indicators only. | Named special-workspace buttons in a separate group; clicking a button toggles that scratchpad. Long names do not stretch regular workspace buttons. Requires `UseHyprlandIPC: true`. |
+| Workspace commands | Legacy `hyprctl dispatch workspace` commands. | Tries Lua-style `hl.dsp` commands first, with a legacy fallback when the command fails. Intended for newer Hyprland versions. |
+| Audio backend | Reads audio state through `libpulse` and changes volume/mute through `pamixer`. | Reads audio state directly through PipeWire/SPA and changes volume/mute asynchronously through WirePlumber's `wpctl`. |
+| GPU monitoring | AMD and NVIDIA support. | AMD support retained; NVIDIA implementation and `WithNvidia` Meson option removed. |
+| Tray menus | Upstream menu styling. | Adjusted menu backgrounds, text, selection colors and separators, plus removal of a fixed tray-container offset. |
+| Popup locking | Presence of `/tmp/gBar__audio` or `/tmp/gBar__bluetooth` prevents another instance. | Process-owned locks in `XDG_RUNTIME_DIR`, released when the process exits, including after a crash. Audio and microphone popups share a lock. |
+
+Clock hover is **opt-in** and defaults to disabled. For a short clock with an additional date on hover:
+
+```text
+DateTimeStyle: %H:%M
+TimeFullOnHover: true
+DateTimeStyleFull: %a, %d/%m/%y
+```
+
+Scratchpad buttons use their real Hyprland names rather than a configurable generic label.
+The `ws-special-active` and `ws-special-inactive` CSS classes are separate, but both use bold purple text in the shipped theme.
+
+### Reliability improvements
+
+- Package results are delivered on the GTK main loop with widget-lifetime checks; malformed output and failed commands are handled without terminating the bar.
+- Bluetooth operations retain stable device data and ignore obsolete completions; tray callbacks check item lifetime and validate received pixmap data.
+- Widget teardown cleans up timers and image references, and scratchpad button references are reset when the bar is recreated.
+- Hyprland IPC handles partial writes, closes sockets on errors, validates socket-path length, avoids SIGPIPE, and limits each exchange to two seconds.
+- CPU sampling establishes an initial baseline and avoids double-counting guest time; disk/network failures and counter resets are handled more safely.
+- Numeric configuration parsing validates complete values and ranges, supports CRLF files, and fixes inline-comment truncation.
+- Popup shutdown handles SIGINT/SIGTERM through the main loop; monitor-change shutdown races and bottom-margin storage are corrected.
+
+### Build and packaging
+
+- Audio dependencies change from `libpulse`/`pamixer` to `libpipewire-0.3`, `libspa-0.2`, and WirePlumber's `wpctl`. Audio control still launches an external command; it is not entirely native PipeWire control.
+- The fork includes an Arch `PKGBUILD` targeting this repository. Ensure WirePlumber is installed for `wpctl`; the current package dependency list does not explicitly include it.
+- The original Nix flake, Home Manager module, and Nix CI integration are removed. This fork does not ship a replacement Nix setup.
+- The plugin example moves from `example/` to `examples/`, and the package-update helper moves from `data/update.sh` to `scripts/update.sh`.
+- Meson/Ninja, C++17, GTK3, gtk-layer-shell, and CSS/SCSS customization remain in use.
+
+### Inherited features and limitations
+
+Regular workspace indicators, the clock, focused-window title, audio/microphone controls and fly-ins,
+Bluetooth, tray icons, system sensors, power actions, configurable widget placement, and native plugins
+already exist upstream. They are not new features introduced by this fork. The default left/center/right
+widget arrangement is also retained.
+
+The direct PipeWire backend does not yet fully handle default-device changes or device removal;
+audio monitoring/control can remain attached to an earlier device. Special-workspace names containing
+quotes or shell metacharacters are not safely escaped in toggle commands and should be avoided.
+Workspace polling still uses synchronous IPC, so its timeout bounds UI stalls rather than eliminating them.
+
 ## Prerequisites 
 *If you don't have the optional dependencies, some features are not available.*
 - wayland
@@ -175,8 +234,11 @@ Major (breaking) changes to the css:
  - [56c53c4](https://github.com/scorpion-26/gBar/commit/56c53c49cdbd7fac11726a5b7ab12f1e6490a211): The lock icon now has its own selector, causing wrong styling when using an outdated css. This can be fixed by including the default ```.lock-button``` section into your css.
 
 ### The Audio/Bluetooth widget doesn't open
-Delete ```/tmp/gBar__audio```/```/tmp/gBar__bluetooth```.
-This happens, when you kill the widget before it closes properly (Automatically after a few seconds for the audio widget, or the close button for the bluetooth widget). Ctrl-C in the terminal (SIGINT) is fine though.
+Check the terminal output and ensure `XDG_RUNTIME_DIR` points to an absolute, private directory owned by your user, normally supplied by your login session.
+Only one audio/microphone popup and one Bluetooth popup can run at a time; a second launch exits without closing the existing popup.
+The lock files are `gBar__audio.lock` and `gBar__bluetooth.lock` inside `XDG_RUNTIME_DIR`.
+They intentionally remain on disk, but the locks are released when the owning process exits, even after a crash.
+Do not delete lock files while a widget is running. Old `/tmp/gBar__audio` and `/tmp/gBar__bluetooth` markers are no longer used by this fork.
 
 ### CPU Temperature is wrong / Lock doesn't work / Exiting WM does not work
 See *Configuration for your system*
