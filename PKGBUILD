@@ -7,7 +7,7 @@ pkgrel=1
 # Architectures which are atleast confirmed to somewhat work.
 arch=('x86_64' 'aarch64')
 pkgdesc='Blazingly fast status bar written with GTK'
-url='https://github.com/scorpion-26/gBar'
+url='https://github.com/diljitht/gBar'
 source=("$_pkgname::git+$url")
 license=('MIT')
 provides=("gbar=$pkgver")
