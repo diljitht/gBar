@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <filesystem>
+#include <limits>
 #include <unordered_set>
 
 namespace SNI
@@ -43,6 +44,7 @@ namespace SNI
         int propertyChangeWatcherID = -1;
 
         bool gathering = false;
+        std::shared_ptr<int> lifetime = std::make_shared<int>(0);
     };
     std::vector<std::unique_ptr<Item>> items;
 
@@ -57,7 +59,7 @@ namespace SNI
     // Swap channels for the render format and create a pixbuf out of it
     static GdkPixbuf* ToPixbuf(uint8_t* sniData, int32_t width, int32_t height)
     {
-        for (int i = 0; i < width * height; i++)
+        for (size_t i = 0; i < size_t(width) * size_t(height); i++)
         {
             struct Px
             {
@@ -70,13 +72,16 @@ namespace SNI
             // Swap to create rgba
             pixel = {pixel.r, pixel.g, pixel.b, pixel.a};
         }
-        return gdk_pixbuf_new_from_data(
+        GdkPixbuf* pixbuf = gdk_pixbuf_new_from_data(
             sniData, GDK_COLORSPACE_RGB, true, 8, width, height, width * 4,
             +[](uint8_t* data, void*)
             {
                 delete[] data;
             },
             nullptr);
+        if (!pixbuf)
+            delete[] sniData;
+        return pixbuf;
     }
 
     static bool ItemMatchesFilter(const Item& item, const std::string& filter, bool& wasExplicitOverride)
@@ -104,26 +109,28 @@ namespace SNI
         struct AsyncData
         {
             Item& item;
-            OnFinishFn onFinish;
+            std::decay_t<OnFinishFn> onFinish;
+            std::weak_ptr<int> lifetime;
         };
-        auto onAsyncResult = [](GObject*, GAsyncResult* result, void* dataPtr)
+        auto onAsyncResult = [](GObject* source, GAsyncResult* result, void* dataPtr)
         {
-            // Data *must* be manually freed!
-            AsyncData* data = (AsyncData*)dataPtr;
-            data->item.gathering = false;
+            std::unique_ptr<AsyncData> data((AsyncData*)dataPtr);
 
             GError* err = nullptr;
-            GVariant* allPropertiesWrapped = g_dbus_connection_call_finish(dbusConnection, result, &err);
+            g_autoptr(GVariant) allPropertiesWrapped = g_dbus_connection_call_finish(G_DBUS_CONNECTION(source), result, &err);
+            if (!data->lifetime.expired())
+                data->item.gathering = false;
             if (err)
             {
                 LOG("SNI: g_dbus_connection_call failed with: " << err->message);
                 g_error_free(err);
-                delete data;
                 return;
             }
+            if (data->lifetime.expired() || !allPropertiesWrapped)
+                return;
 
             // Unwrap tuple
-            GVariant* allProperties = g_variant_get_child_value(allPropertiesWrapped, 0);
+            g_autoptr(GVariant) allProperties = g_variant_get_child_value(allPropertiesWrapped, 0);
             auto getProperty = [&](const std::string_view& prop)
             {
                 return g_variant_lookup_value(allProperties, prop.data(), nullptr);
@@ -134,13 +141,13 @@ namespace SNI
             if (tooltip)
             {
                 const gchar* title = nullptr;
-                if (g_variant_is_container(tooltip) && g_variant_n_children(tooltip) >= 4)
+                if (g_variant_is_of_type(tooltip, G_VARIANT_TYPE("(sa(iiay)ss)")))
                 {
                     // According to spec, ToolTip is of type (sa(iiab)ss) => 4 children
                     // Most icons only set the "title" component (e.g. Discord, KeePassXC, ...)
-                    g_variant_get_child(tooltip, 2, "s", &title);
+                    g_variant_get_child(tooltip, 2, "&s", &title);
                 }
-                else
+                else if (g_variant_is_of_type(tooltip, G_VARIANT_TYPE_STRING))
                 {
                     // TeamViewer only exposes a string, which is not according to spec!
                     title = g_variant_get_string(tooltip, nullptr);
@@ -162,8 +169,8 @@ namespace SNI
             {
                 LOG("SNI: No tooltip found, using title as tooltip");
                 // No tooltip, use title as tooltip
-                GVariant* title = getProperty("Title");
-                if (title)
+                g_autoptr(GVariant) title = getProperty("Title");
+                if (title && g_variant_is_of_type(title, G_VARIANT_TYPE_STRING))
                 {
                     const gchar* titleStr = g_variant_get_string(title, nullptr);
                     if (titleStr != nullptr)
@@ -175,21 +182,19 @@ namespace SNI
                         LOG("SNI: Error querying title");
                     }
                     LOG("SNI: Fallback tooltip: " << data->item.tooltip);
-                    g_variant_unref(title);
                 }
             }
 
             // Query menu
-            GVariant* menuPath = getProperty("Menu");
-            if (menuPath)
+            g_autoptr(GVariant) menuPath = getProperty("Menu");
+            if (menuPath && g_variant_is_of_type(menuPath, G_VARIANT_TYPE_OBJECT_PATH))
             {
                 const char* objectPath;
-                g_variant_get(menuPath, "o", &objectPath);
+                g_variant_get(menuPath, "&o", &objectPath);
                 LOG("SNI: Menu object path: " << objectPath);
 
                 data->item.menuObjectPath = objectPath;
 
-                g_variant_unref(menuPath);
             }
 
             bool wasExplicitOverride = false;
@@ -201,7 +206,6 @@ namespace SNI
                     {
                         LOG("SNI: Disabling item due to config");
                         // We're done here.
-                        delete data;
                         return;
                     }
                 }
@@ -219,12 +223,11 @@ namespace SNI
             }
             if (iconName == "")
             {
-                GVariant* iconNameVar = getProperty("IconName");
-                if (iconNameVar)
+                g_autoptr(GVariant) iconNameVar = getProperty("IconName");
+                if (iconNameVar && g_variant_is_of_type(iconNameVar, G_VARIANT_TYPE_STRING))
                 {
                     iconName = g_variant_get_string(iconNameVar, nullptr);
 
-                    g_variant_unref(iconNameVar);
                 }
             }
             bool gotPixbuf = false;
@@ -240,6 +243,7 @@ namespace SNI
                     if (err)
                     {
                         LOG("SNI: gdk_pixbuf_new_from_file failed: " << err->message);
+                        g_error_free(err);
                     }
                 }
                 else
@@ -257,6 +261,7 @@ namespace SNI
                 if (pixbuf)
                 {
                     LOG("SNI: Creating icon from \"" << iconName << "\"");
+                    g_clear_object(&data->item.pixbuf);
                     data->item.pixbuf = pixbuf;
                     data->item.w = gdk_pixbuf_get_width(pixbuf);
                     data->item.h = gdk_pixbuf_get_height(pixbuf);
@@ -267,54 +272,49 @@ namespace SNI
             if (!gotPixbuf)
             {
                 // IconName failed to load, try IconPixmap as a fallback
-                GVariant* iconPixmap = getProperty("IconPixmap");
-                if (iconPixmap == nullptr)
+                g_autoptr(GVariant) iconPixmap = getProperty("IconPixmap");
+                if (!iconPixmap || !g_variant_is_of_type(iconPixmap, G_VARIANT_TYPE("a(iiay)")))
                 {
                     // All icon locations have failed, bail.
                     LOG("SNI: Cannot create item due to missing icon!");
-                    delete data;
                     return;
                 }
-                GVariantIter* arrIter = nullptr;
-                g_variant_get(iconPixmap, "a(iiay)", &arrIter);
-
-                if (g_variant_iter_n_children(arrIter) != 0)
+                for (gsize i = 0; i < g_variant_n_children(iconPixmap); ++i)
                 {
                     int width;
                     int height;
-                    GVariantIter* dataIter = nullptr;
-                    g_variant_iter_next(arrIter, "(iiay)", &width, &height, &dataIter);
-
-                    LOG("SNI: Width: " << width);
-                    LOG("SNI: Height: " << height);
+                    g_autoptr(GVariant) entry = g_variant_get_child_value(iconPixmap, i);
+                    g_autoptr(GVariant) bytes = nullptr;
+                    g_variant_get(entry, "(ii@ay)", &width, &height, &bytes);
+                    gsize length = 0;
+                    const void* pixels = g_variant_get_fixed_array(bytes, &length, 1);
+                    if (width <= 0 || height <= 0 || width > std::numeric_limits<int>::max() / 4 ||
+                        size_t(height) > std::numeric_limits<size_t>::max() / (size_t(width) * 4) ||
+                        length != size_t(width) * size_t(height) * 4)
+                    {
+                        LOG("SNI: Invalid icon pixmap dimensions or byte count");
+                        continue;
+                    }
+                    uint8_t* iconData = new uint8_t[length];
+                    memcpy(iconData, pixels, length);
+                    GdkPixbuf* pixbuf = ToPixbuf(iconData, width, height);
+                    if (!pixbuf)
+                        continue;
+                    g_clear_object(&data->item.pixbuf);
+                    data->item.pixbuf = pixbuf;
                     data->item.w = width;
                     data->item.h = height;
-                    uint8_t* iconData = new uint8_t[width * height * 4];
-
-                    uint8_t px = 0;
-                    int i = 0;
-                    while (g_variant_iter_next(dataIter, "y", &px))
-                    {
-                        iconData[i] = px;
-                        i++;
-                    }
                     LOG("SNI: Creating icon from pixmap");
-                    data->item.pixbuf = ToPixbuf(iconData, width, height);
-
-                    g_variant_iter_free(dataIter);
+                    break;
                 }
-                g_variant_iter_free(arrIter);
-                g_variant_unref(iconPixmap);
             }
 
-            data->onFinish(data->item);
-            delete data;
-            g_variant_unref(allProperties);
-            g_variant_unref(allPropertiesWrapped);
+            if (data->item.pixbuf)
+                data->onFinish(data->item);
         };
 
         // The tuples will be owned by g_dbus_connection_call, so no cleanup needed
-        AsyncData* data = new AsyncData{item, onFinish};
+        AsyncData* data = new AsyncData{item, onFinish, item.lifetime};
         GError* err = nullptr;
         GVariant* params[1];
         params[0] = g_variant_new_string("org.kde.StatusNotifierItem");
@@ -330,9 +330,12 @@ namespace SNI
 
     static void DestroyItem(Item& item)
     {
-        g_bus_unwatch_name(item.watcherID);
-        g_dbus_connection_signal_unsubscribe(dbusConnection, item.propertyChangeWatcherID);
-        g_object_unref(item.pixbuf);
+        item.lifetime.reset();
+        if (item.watcherID != -1)
+            g_bus_unwatch_name(item.watcherID);
+        if (item.propertyChangeWatcherID != -1)
+            g_dbus_connection_signal_unsubscribe(dbusConnection, item.propertyChangeWatcherID);
+        g_clear_object(&item.pixbuf);
         // dbus menu will be deleted by automatically when the parent widget is destroyed
     }
 
@@ -399,7 +402,8 @@ namespace SNI
 
     static void RemoveSNIItem(Item& item)
     {
-        iconBox->RemoveChild(item.gtkEvent);
+        if (item.gtkEvent)
+            iconBox->RemoveChild(item.gtkEvent);
     }
 
     static TimerResult UpdateWidgets(Box&);
@@ -513,16 +517,14 @@ namespace SNI
             item->object = std::move(client.object);
             Item& itemRef = *item;
             items.push_back(std::move(item));
+            itemRef.watcherID = g_bus_watch_name_on_connection(dbusConnection, itemRef.name.c_str(), G_BUS_NAME_WATCHER_FLAGS_NONE, nullptr,
+                                                              DBusNameVanished, nullptr, nullptr);
             auto onGatherFinish = [](Item& item)
             {
                 if (item.pixbuf == nullptr)
                 {
                     return;
                 }
-                // Add handler for removing
-                item.watcherID = g_bus_watch_name_on_connection(dbusConnection, item.name.c_str(), G_BUS_NAME_WATCHER_FLAGS_NONE, nullptr,
-                                                                DBusNameVanished, nullptr, nullptr);
-
                 // Add handler for icon change
                 char* staticBuf = new char[item.name.size() + 1]{0x0};
                 memcpy(staticBuf, item.name.c_str(), item.name.size());

@@ -6,7 +6,7 @@
 
 namespace System
 {
-    // From 0-1, all cores
+    // From 0-1, all cores. The first sample returns zero.
     double GetCPUUsage();
     // Tctl
     double GetCPUTemp();
@@ -119,7 +119,8 @@ namespace System
     // Bytes per second download. dx is time since last call. Will always return 0 on first run
     double GetNetworkBpsDownload(double dt);
 
-    // This can only be called one at a time. If it is already running it is assumed, that the old handler is no longer valid.
+    // One check at a time; the latest handler wins, including while delivery is queued.
+    // Delivered on the GTK main loop. The caller must guard the lifetime of captured widgets.
     void GetOutdatedPackagesAsync(std::function<void(uint32_t)>&& returnVal);
 
     // Get the current time. If format is empty, the configured DateTimeStyle is used.

@@ -61,14 +61,18 @@ void Window::Run()
     while (!bShouldQuit)
     {
         gtk_main_iteration();
+        if (bShouldQuit)
+            break;
         if (bHandleMonitorChanges)
         {
             // Flush the event loop
-            while (gtk_events_pending())
+            while (!bShouldQuit && gtk_events_pending())
             {
                 if (!gtk_main_iteration())
                     break;
             }
+            if (bShouldQuit)
+                break;
 
             LOG("Window: Handling monitor changes");
             bHandleMonitorChanges = false;
@@ -175,13 +179,16 @@ void Window::Destroy()
 {
     LOG("Window: Destroy");
     m_MainWidget = nullptr;
-    gtk_widget_destroy((GtkWidget*)m_Window);
+    GtkWindow* window = m_Window;
+    m_Window = nullptr;
+    if (window)
+        gtk_widget_destroy((GtkWidget*)window);
 }
 
 void Window::Close()
 {
-    Destroy();
     bShouldQuit = true;
+    Destroy();
 }
 
 void Window::UpdateMargin()
@@ -228,7 +235,7 @@ void Window::SetMargin(Anchor anchor, int32_t margin)
     }
     if (FLAG_CHECK(anchor, Anchor::Bottom))
     {
-        m_Margin[2] = {Anchor::Bottom, margin};
+        m_Margin[3] = {Anchor::Bottom, margin};
     }
 
     if (m_Window)

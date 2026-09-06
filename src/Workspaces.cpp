@@ -2,6 +2,7 @@
 #include "Wayland.h"
 #include <ext-workspace-unstable-v1.h>
 #include <unordered_map>
+#include <poll.h>
 
 #ifdef WITH_WORKSPACES
 namespace Workspaces
@@ -119,7 +120,6 @@ namespace Workspaces
 
         std::string DispatchIPC(const std::string& arg)
         {
-            int hyprSocket = socket(AF_UNIX, SOCK_STREAM, 0);
             std::string socketPath = GetSocketPath();
             if (socketPath == "")
             {
@@ -129,30 +129,99 @@ namespace Workspaces
 
             sockaddr_un addr = {};
             addr.sun_family = AF_UNIX;
-            memcpy(addr.sun_path, socketPath.c_str(), sizeof(addr.sun_path));
+            if (socketPath.size() >= sizeof(addr.sun_path))
+            {
+                LOG("Error: Hyprland socket path is too long.");
+                return "";
+            }
+            memcpy(addr.sun_path, socketPath.c_str(), socketPath.size() + 1);
 
-            int ret = Utils::RetrySocketOp(
-                [&]()
+            int hyprSocket = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
+            if (hyprSocket < 0)
+            {
+                LOG("Error: Couldn't create Hyprland socket.");
+                return "";
+            }
+            struct SocketGuard
+            {
+                int fd;
+                ~SocketGuard() { close(fd); }
+            } socketGuard{hyprSocket};
+
+            // Bound the entire exchange, including a peer that sends data slowly.
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+            auto waitFor = [&](short events)
+            {
+                while (true)
                 {
-                    return connect(hyprSocket, (sockaddr*)&addr, SUN_LEN(&addr));
-                },
-                5, "connect");
+                    auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now()).count();
+                    if (remaining <= 0)
+                    {
+                        errno = ETIMEDOUT;
+                        return false;
+                    }
+                    pollfd fd{hyprSocket, events, 0};
+                    int ready = poll(&fd, 1, (int)remaining);
+                    if (ready > 0)
+                        return true; // Let the socket operation report errors or EOF.
+                    if (ready == 0)
+                        errno = ETIMEDOUT;
+                    if (ready == 0 || errno != EINTR)
+                        return false;
+                }
+            };
+
+            int ret;
+            while (true)
+            {
+                if (std::chrono::steady_clock::now() >= deadline)
+                {
+                    errno = ETIMEDOUT;
+                    ret = -1;
+                    break;
+                }
+                ret = connect(hyprSocket, (sockaddr*)&addr, SUN_LEN(&addr));
+                if (ret == 0 || (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK))
+                    break;
+                // AF_UNIX reports a full listen backlog as EAGAIN, not EINPROGRESS.
+                // No connection is pending yet; retry connect rather than polling SO_ERROR.
+                if (errno != EINTR)
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+            if (ret < 0 && (errno == EINPROGRESS || errno == EALREADY) && waitFor(POLLOUT))
+            {
+                int error = 0;
+                socklen_t size = sizeof(error);
+                ret = getsockopt(hyprSocket, SOL_SOCKET, SO_ERROR, &error, &size);
+                if (ret == 0 && error != 0)
+                {
+                    errno = error;
+                    ret = -1;
+                }
+            }
             if (ret < 0)
             {
                 LOG("Error: Couldn't connect to Hyprland socket.");
                 return "";
             }
 
-            ssize_t written = Utils::RetrySocketOp(
-                [&]()
-                {
-                    return write(hyprSocket, arg.c_str(), arg.size());
-                },
-                5, "write");
-            if (written < 0)
+            size_t offset = 0;
+            while (offset < arg.size())
             {
-                LOG("Error: Couldn't write to Hyprland socket.");
-                return "";
+                ssize_t written = Utils::RetrySocketOp(
+                    [&]() -> ssize_t
+                    {
+                        if (!waitFor(POLLOUT))
+                            return -1;
+                        return send(hyprSocket, arg.data() + offset, arg.size() - offset, MSG_NOSIGNAL);
+                    },
+                    5, "write");
+                if (written <= 0)
+                {
+                    LOG("Error: Couldn't write to Hyprland socket.");
+                    return "";
+                }
+                offset += (size_t)written;
             }
             char buf[2056];
             std::string res;
@@ -160,8 +229,10 @@ namespace Workspaces
             while (true)
             {
                 ssize_t bytesRead = Utils::RetrySocketOp(
-                    [&]()
+                    [&]() -> ssize_t
                     {
+                        if (!waitFor(POLLIN))
+                            return -1;
                         return read(hyprSocket, buf, sizeof(buf));
                     },
                     5, "read");
@@ -176,7 +247,6 @@ namespace Workspaces
                 }
                 res += std::string(buf, bytesRead);
             }
-            close(hyprSocket);
             return res;
         }
 

@@ -47,15 +47,15 @@ namespace Utils
 
 Widget::~Widget()
 {
+    m_TimerLifetime.reset();
+    for (guint timeout : m_Timeouts)
+    {
+        g_source_remove(timeout);
+    }
+    m_Timeouts.clear();
+    m_Childs.clear();
     if (m_Widget)
     {
-        // LOG("Destroy widget and its children");
-        for (guint timeout : m_Timeouts)
-        {
-            g_source_remove(timeout);
-        }
-        m_Timeouts.clear();
-        m_Childs.clear();
         gtk_widget_destroy(m_Widget);
     }
 }
@@ -135,12 +135,7 @@ void Widget::AddChild(std::unique_ptr<Widget>&& widget)
 void Widget::RemoveChild(size_t idx)
 {
     ASSERT(idx < m_Childs.size(), "RemoveChild: Invalid index");
-    if (m_Widget)
-    {
-        auto& child = *m_Childs[idx];
-        gtk_container_remove((GtkContainer*)m_Widget, child.m_Widget);
-        child.m_Widget = nullptr;
-    }
+    // Destroy descendants before GTK releases their owning containers.
     m_Childs.erase(m_Childs.begin() + idx);
 }
 void Widget::RemoveChild(Widget* widget)
@@ -152,13 +147,6 @@ void Widget::RemoveChild(Widget* widget)
                            });
     if (it != m_Childs.end())
     {
-        if (m_Widget)
-        {
-            LOG("Remove widget from parent");
-            // Ref the widget, so we don't mess up the RAII cleanup below
-            g_object_ref(it->get()->m_Widget);
-            gtk_container_remove((GtkContainer*)m_Widget, it->get()->m_Widget);
-        }
         m_Childs.erase(it);
     }
     else
@@ -535,7 +523,7 @@ void NetworkSensor::Draw(cairo_t* cr)
 Texture::~Texture()
 {
     if (m_Pixbuf)
-        g_free(m_Pixbuf);
+        g_object_unref(m_Pixbuf);
 }
 
 void Texture::SetBuf(GdkPixbuf* pixbuf, size_t width, size_t height)
@@ -543,7 +531,7 @@ void Texture::SetBuf(GdkPixbuf* pixbuf, size_t width, size_t height)
     m_Width = width;
     m_Height = height;
     if (m_Pixbuf)
-        g_free(m_Pixbuf);
+        g_object_unref(m_Pixbuf);
 
     m_Pixbuf = gdk_pixbuf_copy(pixbuf);
 

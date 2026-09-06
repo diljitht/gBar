@@ -2,6 +2,8 @@
 #include "Common.h"
 
 #include <fstream>
+#include <charconv>
+#include <cmath>
 
 static Config config;
 
@@ -23,10 +25,27 @@ void PrintLegacyNotation(const std::string_view& variableName, const std::string
 }
 
 template<typename T>
-void ApplyProperty(T& propertyToSet, const std::string_view& value);
+bool ApplyProperty(T& propertyToSet, const std::string_view& value)
+{
+    T parsed{};
+    auto numeric = value;
+    if (!numeric.empty() && numeric.front() == '+')
+        numeric.remove_prefix(1);
+    if (!numeric.empty() && !(value.front() == '+' && numeric.front() == '-'))
+    {
+        auto result = std::from_chars(numeric.data(), numeric.data() + numeric.size(), parsed);
+        if (result.ec == std::errc{} && result.ptr == numeric.data() + numeric.size())
+        {
+            propertyToSet = parsed;
+            return true;
+        }
+    }
+    LOG("Invalid numeric property: " << value);
+    return false;
+}
 
 template<>
-void ApplyProperty<std::string>(std::string& propertyToSet, const std::string_view& value)
+bool ApplyProperty<std::string>(std::string& propertyToSet, const std::string_view& value)
 {
     propertyToSet = value;
 
@@ -36,45 +55,43 @@ void ApplyProperty<std::string>(std::string& propertyToSet, const std::string_vi
     Utils::Replace(propertyToSet, "\\\\", "\\");
     Utils::Replace(propertyToSet, "\\t", "\t");
     Utils::Replace(propertyToSet, "\\s", " ");
+    return true;
 }
 
 template<>
-void ApplyProperty<uint32_t>(uint32_t& propertyToSet, const std::string_view& value)
+bool ApplyProperty<double>(double& propertyToSet, const std::string_view& value)
 {
-    // Why, C++?
-    std::string valStr = std::string(value);
-    propertyToSet = atoi(valStr.c_str());
+    double parsed{};
+    auto numeric = value;
+    if (!numeric.empty() && numeric.front() == '+')
+        numeric.remove_prefix(1);
+    if (!numeric.empty() && !(value.front() == '+' && numeric.front() == '-'))
+    {
+        auto result = std::from_chars(numeric.data(), numeric.data() + numeric.size(), parsed);
+        if (result.ec == std::errc{} && result.ptr == numeric.data() + numeric.size() && std::isfinite(parsed))
+        {
+            propertyToSet = parsed;
+            return true;
+        }
+    }
+    LOG("Invalid numeric property: " << value);
+    return false;
 }
 
 template<>
-void ApplyProperty<int32_t>(int32_t& propertyToSet, const std::string_view& value)
+bool ApplyProperty<char>(char& propertyToSet, const std::string_view& value)
 {
-    // Why, C++?
-    std::string valStr = std::string(value);
-    propertyToSet = atoi(valStr.c_str());
-}
-
-template<>
-void ApplyProperty<double>(double& propertyToSet, const std::string_view& value)
-{
-    // Why, C++?
-    std::string valStr = std::string(value);
-    propertyToSet = std::stod(valStr.c_str());
-}
-
-template<>
-void ApplyProperty<char>(char& propertyToSet, const std::string_view& value)
-{
-    if (value.size() > 1)
+    if (value.size() != 1)
     {
         LOG("Invalid size for char property: " << value);
-        return;
+        return false;
     }
     propertyToSet = value[0];
+    return true;
 }
 
 template<>
-void ApplyProperty<bool>(bool& propertyToSet, const std::string_view& value)
+bool ApplyProperty<bool>(bool& propertyToSet, const std::string_view& value)
 {
     // Why, C++?
     if (value == "true")
@@ -88,12 +105,14 @@ void ApplyProperty<bool>(bool& propertyToSet, const std::string_view& value)
     else
     {
         LOG("Invalid value for bool property: " << value);
+        return false;
     }
+    return true;
 }
 
 // Why does C++ not have partial template specialization?
 template<typename First, typename Second>
-void ApplyProperty(std::pair<First, Second>& propertyToSet, const std::string_view& value)
+bool ApplyProperty(std::pair<First, Second>& propertyToSet, const std::string_view& value)
 {
     // TODO: Ignore escaped delimiter (e.g. \, is the same as ,)
     const char delim = ',';
@@ -101,7 +120,7 @@ void ApplyProperty(std::pair<First, Second>& propertyToSet, const std::string_vi
     size_t delimPos = value.find(delim);
     if (delimPos == std::string::npos)
     {
-        return;
+        return false;
     }
     std::string_view before = value.substr(0, delimPos);
     std::string_view after = value.substr(delimPos + 1);
@@ -109,18 +128,23 @@ void ApplyProperty(std::pair<First, Second>& propertyToSet, const std::string_vi
     // Strip whitespaces for before
     size_t beginBefore = before.find_first_not_of(whitespace);
     size_t endBefore = before.find_last_not_of(whitespace);
+    size_t beginAfter = after.find_first_not_of(whitespace);
+    if (beginBefore == std::string_view::npos || beginAfter == std::string_view::npos)
+        return false;
     before = before.substr(beginBefore, endBefore - beginBefore + 1);
 
     // Strip whitespace for after
-    size_t beginAfter = after.find_first_not_of(whitespace);
-    after = after.substr(beginAfter);
+    after = after.substr(beginAfter, after.find_last_not_of(whitespace) - beginAfter + 1);
 
-    ApplyProperty(propertyToSet.first, before);
-    ApplyProperty(propertyToSet.second, after);
+    auto parsed = propertyToSet;
+    if (!ApplyProperty(parsed.first, before) || !ApplyProperty(parsed.second, after))
+        return false;
+    propertyToSet = std::move(parsed);
+    return true;
 }
 
 template<typename T>
-void ApplyProperty(std::vector<T>& propertyToSet, const std::string_view& value)
+bool ApplyProperty(std::vector<T>& propertyToSet, const std::string_view& value)
 {
     propertyToSet.clear();
     // Delete []
@@ -129,7 +153,7 @@ void ApplyProperty(std::vector<T>& propertyToSet, const std::string_view& value)
     if (beginBracket == std::string::npos || endBracket == std::string::npos)
     {
         LOG("Error: Missing [ or ] for vector property!");
-        return;
+        return false;
     }
     std::string_view elems = value.substr(beginBracket, endBracket - beginBracket + 1);
     size_t beginString = 0;
@@ -146,16 +170,17 @@ void ApplyProperty(std::vector<T>& propertyToSet, const std::string_view& value)
         propertyToSet.push_back(std::string(elem));
         beginString = ++endString;
     }
+    return true;
 }
 
 template<typename T, std::enable_if_t<!Utils::IsMapLike<T>, bool> = true>
-void AddConfigVar(const std::string& propertyName, T& propertyToSet, std::string_view line, bool& setConfig)
+bool AddConfigVar(const std::string& propertyName, T& propertyToSet, std::string_view line, bool& setConfig)
 {
     const char* whitespace = " \t";
     if (setConfig)
     {
         // Don't bother, already found something else
-        return;
+        return false;
     }
 
     // Strip empty space at the beginning
@@ -164,14 +189,14 @@ void AddConfigVar(const std::string& propertyName, T& propertyToSet, std::string
     {
         // Line is empty, don't need to check anymore
         setConfig = true;
-        return;
+        return false;
     }
     line = line.substr(line.find_first_not_of(whitespace));
 
     // Check if line starts with [propertyName]:
     if (line.find(propertyName + ":") != 0)
     {
-        return;
+        return false;
     }
     size_t colon = line.find_first_of(":");
 
@@ -189,20 +214,26 @@ void AddConfigVar(const std::string& propertyName, T& propertyToSet, std::string
     }
 
     // Set value
-    ApplyProperty(propertyToSet, value);
-    LOG("Set value for " << propertyName << ": " << value);
+    bool valid = ApplyProperty(propertyToSet, value);
+    if (valid)
+    {
+        LOG("Set value for " << propertyName << ": " << value);
+    }
+    else
+    {
+        LOG("Invalid value for " << propertyName << ": " << value);
+    }
 
     setConfig = true;
+    return valid;
 }
 
 // Specialization for std::[unordered_]map
 template<typename MapLike, std::enable_if_t<Utils::IsMapLike<MapLike>, bool> = true>
 void AddConfigVar(const std::string& propertyName, MapLike& propertyToSet, std::string_view line, bool& setConfig)
 {
-    bool hasntSetProperty = !setConfig;
-    std::pair<typename MapLike::key_type, typename MapLike::mapped_type> buf;
-    AddConfigVar(propertyName, buf, line, setConfig);
-    if (setConfig && hasntSetProperty)
+    std::pair<typename MapLike::key_type, typename MapLike::mapped_type> buf{};
+    if (AddConfigVar(propertyName, buf, line, setConfig))
     {
         // This was found
         propertyToSet[buf.first] = buf.second;
@@ -234,6 +265,8 @@ void Config::Load(const std::string& overrideConfigLocation)
     std::string line;
     while (std::getline(file, line))
     {
+        if (!line.empty() && line.back() == '\r')
+            line.pop_back();
         std::string_view lineView = {line};
         // Strip comments
         size_t comment = line.find_first_of('#');
@@ -243,7 +276,7 @@ void Config::Load(const std::string& overrideConfigLocation)
         }
         if (comment != std::string_view::npos)
         {
-            lineView = lineView.substr(0, comment - 1);
+            lineView = lineView.substr(0, comment);
         }
 
         bool foundProperty = false;

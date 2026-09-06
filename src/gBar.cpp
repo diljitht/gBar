@@ -9,39 +9,26 @@
 
 #include <cmath>
 #include <cstdio>
+#include <cerrno>
+#include <csignal>
+#include <cstring>
+#include <fcntl.h>
+#include <pthread.h>
+#include <sys/file.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
-const char* audioTmpFilePath = "/tmp/gBar__audio";
-const char* bluetoothTmpFilePath = "/tmp/gBar__bluetooth";
-
-static bool tmpFileOpen = false;
+static volatile sig_atomic_t shutdownSignal = 0;
+static int lockFd = -1;
 
 void OpenAudioFlyin(Window& window, const std::string& monitor, AudioFlyin::Type type)
 {
-    tmpFileOpen = true;
-    if (access(audioTmpFilePath, F_OK) != 0)
-    {
-        FILE* audioTempFile = fopen(audioTmpFilePath, "w");
-        AudioFlyin::Create(window, monitor, type);
-        fclose(audioTempFile);
-    }
-    else
-    {
-        // Already open, close
-        LOG("Audio flyin already open (/tmp/gBar__audio exists)! Exiting...");
-        exit(0);
-    }
+    AudioFlyin::Create(window, monitor, type);
 }
 
-void CloseTmpFiles(int sig)
+static void RequestShutdown(int sig)
 {
-    if (tmpFileOpen)
-    {
-        remove(audioTmpFilePath);
-        remove(bluetoothTmpFilePath);
-    }
-    if (sig != 0)
-        exit(1);
+    shutdownSignal = sig;
 }
 
 void PrintHelp()
@@ -91,19 +78,7 @@ void CreateWidget(const std::string& widget, Window& window)
     {
         if (RuntimeConfig::Get().hasBlueZ)
         {
-            if (access(bluetoothTmpFilePath, F_OK) != 0)
-            {
-                tmpFileOpen = true;
-                FILE* bluetoothTmpFile = fopen(bluetoothTmpFilePath, "w");
-                BluetoothDevices::Create(window, window.GetName());
-                fclose(bluetoothTmpFile);
-            }
-            else
-            {
-                // Already open, close
-                LOG("Bluetooth widget already open (/tmp/gBar__bluetooth exists)! Exiting...");
-                exit(0);
-            }
+            BluetoothDevices::Create(window, window.GetName());
         }
         else
         {
@@ -185,7 +160,82 @@ int main(int argc, char** argv)
         return 0;
     }
 
-    signal(SIGINT, CloseTmpFiles);
+    struct sigaction action = {};
+    action.sa_handler = RequestShutdown;
+    sigemptyset(&action.sa_mask);
+    action.sa_flags = SA_RESTART;
+    if (sigaction(SIGINT, &action, nullptr) != 0 || sigaction(SIGTERM, &action, nullptr) != 0)
+    {
+        LOG("Cannot install shutdown handlers: " << std::strerror(errno));
+        return 1;
+    }
+
+    // Acquire once, not in OnWidget: monitor changes can recreate the widget.
+    const char* lockName = nullptr;
+    if (widget == "audio" || widget == "mic")
+        lockName = "gBar__audio.lock";
+#ifdef WITH_BLUEZ
+    else if (widget == "bluetooth")
+        lockName = "gBar__bluetooth.lock";
+#endif
+    if (lockName)
+    {
+        const char* runtimeDir = std::getenv("XDG_RUNTIME_DIR");
+        if (!runtimeDir || runtimeDir[0] != '/')
+        {
+            LOG("A valid XDG_RUNTIME_DIR is required for widget locking.");
+            return 1;
+        }
+        int dirFd = open(runtimeDir, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+        struct stat info = {};
+        if (dirFd < 0 || fstat(dirFd, &info) != 0 || info.st_uid != geteuid() || (info.st_mode & 0077) != 0)
+        {
+            if (dirFd >= 0)
+                close(dirFd);
+            LOG("XDG_RUNTIME_DIR must be a private directory owned by the current user.");
+            return 1;
+        }
+        lockFd = openat(dirFd, lockName, O_RDWR | O_CREAT | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK, 0600);
+        int openError = errno;
+        close(dirFd);
+        if (lockFd < 0)
+        {
+            LOG("Cannot open widget lock: " << std::strerror(openError));
+            return 1;
+        }
+        if (fstat(lockFd, &info) != 0 || !S_ISREG(info.st_mode) || info.st_uid != geteuid() || info.st_nlink != 1)
+        {
+            close(lockFd);
+            LOG("Widget lock must be a regular file owned by the current user with one link.");
+            return 1;
+        }
+        if (flock(lockFd, LOCK_EX | LOCK_NB) != 0)
+        {
+            int lockError = errno;
+            close(lockFd);
+            if (lockError == EWOULDBLOCK || lockError == EAGAIN)
+            {
+                LOG("Widget already open (" << lockName << " is locked)! Exiting...");
+                return 0;
+            }
+            LOG("Cannot acquire widget lock: " << std::strerror(lockError));
+            return 1;
+        }
+        // OpenProcess forks a wrapper that does not exec, so CLOEXEC is not enough.
+        int forkError = pthread_atfork(nullptr, nullptr, +[]()
+        {
+            if (lockFd >= 0)
+                close(lockFd);
+            lockFd = -1;
+        });
+        if (forkError != 0)
+        {
+            close(lockFd);
+            LOG("Cannot install widget lock fork handler: " << std::strerror(forkError));
+            return 1;
+        }
+    }
+
     System::Init(overrideConfigLocation);
 
     Window window;
@@ -203,9 +253,25 @@ int main(int argc, char** argv)
     {
         CreateWidget(widget, window);
     };
+    // Only the flag is touched in signal context; GTK and cleanup run here.
+    std::pair<Window*, bool> shutdownData{&window, false};
+    guint shutdownSource = g_timeout_add(50, [](gpointer data) -> gboolean
+    {
+        auto& state = *static_cast<std::pair<Window*, bool>*>(data);
+        if (shutdownSignal && !state.second)
+        {
+            state.second = true;
+            state.first->Close();
+        }
+        return G_SOURCE_CONTINUE;
+    }, &shutdownData);
     window.Run();
 
+    g_source_remove(shutdownSource);
     System::FreeResources();
-    CloseTmpFiles(0);
+    // Never unlink flock files: another process may already have opened the inode.
+    // Closing our descriptor (also automatic on abnormal exit) releases only our lock.
+    if (lockFd >= 0)
+        close(lockFd);
     return 0;
 }

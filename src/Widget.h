@@ -136,34 +136,40 @@ public:
             TimerCallback<TWidget> timeoutFn;
             Widget* thisWidget;
             guint id;
+            std::weak_ptr<bool> lifetime;
         };
-        TimerPayload* payload = new TimerPayload();
+        auto payload = std::make_shared<TimerPayload>();
         payload->thisWidget = this;
         payload->timeoutFn = std::move(callback);
+        payload->lifetime = m_TimerLifetime;
         auto fn = [](void* data) -> int
         {
-            TimerPayload* payload = (TimerPayload*)data;
+            // Keep the callable alive even if it destroys its widget and source.
+            auto payload = *(std::shared_ptr<TimerPayload>*)data;
             TimerResult result = payload->timeoutFn(*(TWidget*)payload->thisWidget);
+            if (payload->lifetime.expired())
+                return false;
             if (result == TimerResult::Delete)
             {
                 payload->thisWidget->m_Timeouts.erase(payload->id);
-                delete payload;
                 return false;
             }
             return true;
         };
         if (dispatch == TimerDispatchBehaviour::ImmediateDispatch)
         {
-            if (fn(payload) == false)
+            if (fn(&payload) == false)
             {
                 return;
             }
         }
-        payload->id = g_timeout_add(timeoutMS, +fn, payload);
+        payload->id = g_timeout_add_full(G_PRIORITY_DEFAULT, timeoutMS, +fn, new std::shared_ptr<TimerPayload>(payload),
+                                        [](void* data) { delete (std::shared_ptr<TimerPayload>*)data; });
         m_Timeouts.insert(payload->id);
     }
 
     GtkWidget* Get() { return m_Widget; };
+    std::weak_ptr<bool> GetLifetime() const { return m_TimerLifetime; }
     const std::vector<std::unique_ptr<Widget>>& GetChilds() const { return m_Childs; };
 
     void SetVisible(bool visible);
@@ -187,6 +193,7 @@ protected:
     Callback<Widget> m_OnCreate;
 
     std::unordered_set<guint> m_Timeouts;
+    std::shared_ptr<bool> m_TimerLifetime = std::make_shared<bool>(true);
 };
 
 class Box : public Widget
@@ -307,7 +314,7 @@ private:
     size_t m_ForcedHeight = 0;
     double m_Angle;
     int32_t m_Padding = 0;
-    GdkPixbuf* m_Pixbuf;
+    GdkPixbuf* m_Pixbuf = nullptr;
 };
 
 class Revealer : public Widget

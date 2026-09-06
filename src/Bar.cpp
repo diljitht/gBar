@@ -4,7 +4,7 @@
 #include "Common.h"
 #include "Config.h"
 #include "SNI.h"
-#include <mutex>
+#include <memory>
 #include <cstdlib>
 
 namespace Bar
@@ -199,7 +199,7 @@ namespace Bar
             {
                 diskText->SetText(text);
             }
-            sensor.SetValue(info.usedGiB / info.totalGiB);
+            sensor.SetValue(info.totalGiB > 0 ? info.usedGiB / info.totalGiB : 0);
             return TimerResult::Ok;
         }
 
@@ -258,13 +258,13 @@ namespace Bar
         }
 #endif
 
-        static std::mutex packageTextLock;
         static TimerResult UpdatePackages(Text& text)
         {
             System::GetOutdatedPackagesAsync(
-                [&](uint32_t numOutdatedPackages)
+                [&text, weakLifetime = text.GetLifetime()](uint32_t numOutdatedPackages)
                 {
-                    packageTextLock.lock();
+                    if (weakLifetime.expired())
+                        return;
                     if (numOutdatedPackages)
                     {
                         text.SetText(Config::Get().packageOutOfDateIcon);
@@ -279,7 +279,6 @@ namespace Bar
                         text.SetClass("package-empty");
                         text.SetTooltip("");
                     }
-                    packageTextLock.unlock();
                 });
             return TimerResult::Ok;
         }
@@ -1385,6 +1384,10 @@ namespace Bar
 
     void Create(Window& window, const std::string& monitorName)
     {
+#ifdef WITH_WORKSPACES
+        DynCtx::workspaces.clear();
+        DynCtx::specialWorkspaces.clear();
+#endif
         ASSERT(!window.GetName().empty(), "Error: The bar requires a specified monitor. Use 'gBar bar <monitor>' instead!");
         monitor = monitorName;
 

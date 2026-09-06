@@ -14,11 +14,15 @@
 #include <sstream>
 #include <iomanip>
 #include <thread>
+#include <charconv>
+#include <cmath>
+#include <memory>
 
 #include <gio/gio.h>
 
 #include <dlfcn.h>
 #include <sys/statvfs.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 namespace System
@@ -29,14 +33,11 @@ namespace System
         size_t idle = 0;
     };
 
-    static CPUTimestamp curCPUTime;
-    static CPUTimestamp prevCPUTime;
-
     double GetCPUUsage()
     {
-        // Gather curCPUTime
+        static CPUTimestamp prevCPUTime;
+        static bool haveSample = false;
         std::ifstream procstat("/proc/stat");
-        ASSERT(procstat.is_open(), "Cannot open /proc/stat");
 
         std::string line;
         while (std::getline(procstat, line))
@@ -47,24 +48,25 @@ namespace System
 
             // Format: cpu user nice system idle iowait irq softirq steal guest guest_nice
             std::istringstream lineStr(line.substr(4));
-            size_t user, nice, system, idle, iowait, irq, softirq, steal, guest, guestNice;
-            if (!(lineStr >> user >> nice >> system >> idle >> iowait >> irq >> softirq >> steal
-                          >> guest >> guestNice))
+            size_t user, nice, system, idle, iowait, irq, softirq, steal;
+            if (!(lineStr >> user >> nice >> system >> idle >> iowait >> irq >> softirq >> steal))
                 continue;
 
-            prevCPUTime = curCPUTime;
-            curCPUTime.total = user + nice + system + idle + iowait + irq + softirq + steal
-                + guest + guestNice;
-            curCPUTime.idle = idle;
-            break;
+            // Guest time is already included in user/nice. I/O wait is not CPU work.
+            CPUTimestamp current{user + nice + system + idle + iowait + irq + softirq + steal, idle + iowait};
+            CPUTimestamp previous = prevCPUTime;
+            prevCPUTime = current;
+            bool firstSample = !haveSample;
+            haveSample = true;
+            if (firstSample || current.total <= previous.total || current.idle < previous.idle)
+                return 0;
+            size_t diffTotal = current.total - previous.total;
+            size_t diffIdle = current.idle - previous.idle;
+            return diffIdle <= diffTotal ? 1.0 - (double)diffIdle / diffTotal : 0;
         }
 
-        // Get diffs and percentage of idle time
-        size_t diffTotal = curCPUTime.total - prevCPUTime.total;
-        size_t diffIdle = curCPUTime.idle - prevCPUTime.idle;
-        if (diffTotal == 0)
-            return 0;
-        return 1 - ((double)diffIdle / (double)diffTotal);
+        haveSample = false;
+        return 0;
     }
 
     double GetCPUTemp()
@@ -127,7 +129,7 @@ namespace System
 
         // TODO: This is the wrong place to do this, since we don't know whether it is actually disabled.
         // A RuntimeConfig would be better, but it works for now.
-        LOG("Couldn't open battery charge files! Disabling battery widget.")
+        LOG("Couldn't open battery charge files! Disabling battery widget.");
         return -1;
     }
 
@@ -196,15 +198,16 @@ namespace System
 
     DiskInfo GetDiskInfo()
     {
-        struct statvfs stat;
+        struct statvfs stat{};
         std::string partition = Config::Get().diskPartition;
         int err = statvfs(partition.c_str(), &stat);
-        ASSERT(err == 0, "Cannot stat " + partition + "!");
-
         DiskInfo out{};
         out.partition = partition;
-        out.totalGiB = (double)(stat.f_blocks * stat.f_frsize) / (1024 * 1024 * 1024);
-        out.usedGiB = (double)((stat.f_blocks - stat.f_bfree) * stat.f_frsize) / (1024 * 1024 * 1024);
+        if (err != 0)
+            return out;
+        out.totalGiB = (double)stat.f_blocks * stat.f_frsize / (1024 * 1024 * 1024);
+        if (stat.f_bfree <= stat.f_blocks)
+            out.usedGiB = (double)(stat.f_blocks - stat.f_bfree) * stat.f_frsize / (1024 * 1024 * 1024);
         return out;
     }
 
@@ -218,6 +221,7 @@ namespace System
             LOG("Can't connect to d-bus! Disabling Bluetooth!");
             // dbus not found, disable bluetooth
             RuntimeConfig::Get().hasBlueZ = false;
+            return;
         }
 
         GError* err = nullptr;
@@ -226,11 +230,17 @@ namespace System
         if (!objects)
         {
             LOG("Can't connect to BlueZ d-bus! Disabling Bluetooth!");
-            LOG(err->message);
-            g_error_free(err);
+            if (err)
+            {
+                LOG(err->message);
+                g_error_free(err);
+            }
             // Not found, disable bluetooth
             RuntimeConfig::Get().hasBlueZ = false;
         }
+        if (objects)
+            g_variant_unref(objects);
+        g_object_unref(connection);
     }
     BluetoothInfo GetBluetoothInfo()
     {
@@ -242,16 +252,21 @@ namespace System
         }
         // Init D-Bus
         GDBusConnection* connection = g_bus_get_sync(G_BUS_TYPE_SYSTEM, nullptr, nullptr);
-        ASSERT(connection, "Failed to connect to d-bus!");
+        if (!connection)
+            return out;
 
         GError* err = nullptr;
         GVariant* objects = g_dbus_connection_call_sync(connection, "org.bluez", "/", "org.freedesktop.DBus.ObjectManager", "GetManagedObjects",
                                                         nullptr, G_VARIANT_TYPE("(a{oa{sa{sv}}})"), G_DBUS_CALL_FLAGS_NONE, -1, nullptr, &err);
+        g_object_unref(connection);
         if (!objects)
         {
-            LOG(err->message);
-            g_error_free(err);
-            exit(-1);
+            if (err)
+            {
+                LOG(err->message);
+                g_error_free(err);
+            }
+            return out;
         }
 
         // First array
@@ -535,15 +550,25 @@ namespace System
     {
         if (!RuntimeConfig::Get().hasNet)
         {
+            prevBytes = UINT64_MAX;
             return 0.f;
         }
         std::ifstream bytes(deviceFile);
         std::string bytesStr;
-        std::getline(bytes, bytesStr);
+        if (!(bytes >> bytesStr))
+        {
+            prevBytes = UINT64_MAX;
+            return 0.f;
+        }
+        uint64_t curBytes = 0;
+        auto parsed = std::from_chars(bytesStr.data(), bytesStr.data() + bytesStr.size(), curBytes);
+        if (parsed.ec != std::errc{} || parsed.ptr != bytesStr.data() + bytesStr.size())
+        {
+            prevBytes = UINT64_MAX;
+            return 0.f;
+        }
 
-        uint64_t curBytes = std::stoull(bytesStr);
-
-        if (prevBytes == UINT64_MAX)
+        if (prevBytes == UINT64_MAX || curBytes < prevBytes || !std::isfinite(dt) || dt <= 0)
         {
             prevBytes = curBytes;
             return 0;
@@ -587,7 +612,7 @@ namespace System
             {
                 return; // Don't bother
             }
-            handlerFunction = returnVal;
+            handlerFunction = std::move(returnVal);
             if (currentlyRunning)
             {
                 // Thread is running, only update handler
@@ -598,42 +623,67 @@ namespace System
         }
 
         std::thread(
-            [&]()
+            []()
             {
-                // We need a pipe, since there is no "libpacman". This should only be called every so often anyways
-                std::string number;
-                char buf[2056];
-                FILE* pipe = popen(Config::Get().checkPackagesCommand.c_str(), "r"); // Redirect stderr
-                ASSERT(pipe, "GetOutdatedPackages: Couldn't open pipe");
-                while (fgets(buf, sizeof(buf), pipe) != 0)
+                struct CallbackData
                 {
-                    number.append(buf);
+                    uint32_t count = 0;
+                    bool valid = false;
+                };
+                auto data = std::make_unique<CallbackData>();
+                try
+                {
+                    auto closePipe = [](FILE* pipe) { pclose(pipe); };
+                    std::unique_ptr<FILE, decltype(closePipe)> pipe(popen(Config::Get().checkPackagesCommand.c_str(), "r"), closePipe);
+                    if (pipe)
+                    {
+                        std::string output;
+                        char buf[2056];
+                        while (fgets(buf, sizeof(buf), pipe.get()) != nullptr)
+                            output.append(buf);
+                        bool readOK = feof(pipe.get()) && !ferror(pipe.get());
+                        int status = pclose(pipe.release());
+                        if (readOK && status != -1 && WIFEXITED(status) && WEXITSTATUS(status) == 0)
+                        {
+                            // Accept the first whitespace-delimited count, not a numeric prefix.
+                            std::istringstream stream(output);
+                            std::string token;
+                            if (stream >> token)
+                            {
+                                auto parsed = std::from_chars(token.data(), token.data() + token.size(), data->count);
+                                data->valid = parsed.ec == std::errc{} && parsed.ptr == token.data() + token.size();
+                            }
+                        }
+                    }
+                }
+                catch (const std::exception& error)
+                {
+                    LOG("GetOutdatedPackages: " << error.what());
                 }
 
-                ASSERT(feof(pipe), "GetOutdatedPackages: Cannot read to eof!");
-
-                int exitCode = pclose(pipe) / 256;
-                {
-                    std::scoped_lock<std::mutex> lock(configMutex);
-                    if (exitCode != 0)
+                // Keep the check pending until dispatch, so a newer caller replaces the handler.
+                g_idle_add_full(
+                    G_PRIORITY_DEFAULT_IDLE,
+                    +[](gpointer userData) -> gboolean
                     {
-                        // Invalid script/error
-                        LOG("GetOutdatedPackages: Invalid command. Disabling package widget!");
-                        RuntimeConfig::Get().hasPackagesScript = false;
-                        currentlyRunning = false;
-                        return;
-                    }
-                    try
-                    {
-                        handlerFunction(std::stoul(buf));
-                    }
-                    catch (std::invalid_argument&)
-                    {
-                        LOG("GetOutdatedPackages: Invalid output of the package script. Disabling package widget!");
-                        RuntimeConfig::Get().hasPackagesScript = false;
-                    }
-                    currentlyRunning = false;
-                }
+                        auto* data = static_cast<CallbackData*>(userData);
+                        std::function<void(uint32_t)> handler;
+                        {
+                            std::scoped_lock<std::mutex> lock(configMutex);
+                            handler = std::move(handlerFunction);
+                            currentlyRunning = false;
+                            if (!data->valid)
+                            {
+                                LOG("GetOutdatedPackages: Command failed or returned an invalid count. Disabling package widget!");
+                                RuntimeConfig::Get().hasPackagesScript = false;
+                            }
+                        }
+                        if (data->valid && handler)
+                            handler(data->count);
+                        return G_SOURCE_REMOVE;
+                    },
+                    data.release(),
+                    +[](gpointer userData) { delete static_cast<CallbackData*>(userData); });
             })
             .detach();
     }

@@ -1,6 +1,6 @@
 #include "BluetoothDevices.h"
 #include "System.h"
-#include <mutex>
+#include <memory>
 #include <unordered_map>
 #include <string>
 #include <algorithm>
@@ -25,9 +25,9 @@ namespace BluetoothDevices
         {
             System::BluetoothDevice device{};
             DeviceState state{};
+            std::shared_ptr<System::BluetoothDevice> request;
         };
 
-        std::mutex deviceMutex;
         std::vector<BTDeviceWithState> devices;
         Box* deviceListBox;
         Window* win;
@@ -41,6 +41,37 @@ namespace BluetoothDevices
             state &= ~DeviceState::Failed;
             button.RemoveClass("failed");
 
+            // System retains a reference on its worker; the callback owns this stable copy.
+            auto requestDevice = std::make_shared<System::BluetoothDevice>(device.device);
+            auto onFinish = [requestDevice](bool success, System::BluetoothDevice&)
+            {
+                struct Result
+                {
+                    std::shared_ptr<System::BluetoothDevice> request;
+                    bool success;
+                };
+                g_idle_add_full(
+                    G_PRIORITY_DEFAULT_IDLE,
+                    +[](void* ptr) -> gboolean
+                    {
+                        const auto& result = *static_cast<Result*>(ptr);
+                        auto it = std::find_if(devices.begin(), devices.end(),
+                                               [&](const auto& current) { return current.request == result.request; });
+                        if (it != devices.end())
+                        {
+                            it->request.reset();
+                            if (!result.success)
+                            {
+                                it->state &= ~(DeviceState::RequestConnect | DeviceState::RequestDisconnect);
+                                it->state |= DeviceState::Failed;
+                            }
+                        }
+                        return G_SOURCE_REMOVE;
+                    },
+                    new Result{requestDevice, success},
+                    +[](void* ptr) { delete static_cast<Result*>(ptr); });
+            };
+
             // Only try to connect, if we know we're already disconnected and we haven't requested before(Same for disconnect)
             if (FLAG_CHECK(state, DeviceState::Disconnected) && !FLAG_CHECK(state, DeviceState::RequestConnect))
             {
@@ -48,18 +79,8 @@ namespace BluetoothDevices
                 button.RemoveClass("inactive");
                 state |= DeviceState::RequestConnect;
 
-                System::ConnectBTDevice(device.device,
-                                        [&dev = device, &but = button](bool success, System::BluetoothDevice&)
-                                        {
-                                            deviceMutex.lock();
-                                            if (!success)
-                                            {
-                                                dev.state &= ~DeviceState::RequestConnect;
-                                                dev.state |= DeviceState::Failed;
-                                                but.AddClass("failed");
-                                            }
-                                            deviceMutex.unlock();
-                                        });
+                device.request = requestDevice;
+                System::ConnectBTDevice(*requestDevice, onFinish);
             }
             else if (FLAG_CHECK(state, DeviceState::Connected) && !FLAG_CHECK(state, DeviceState::RequestDisconnect))
             {
@@ -67,18 +88,8 @@ namespace BluetoothDevices
                 button.RemoveClass("active");
                 state |= DeviceState::RequestDisconnect;
 
-                System::DisconnectBTDevice(device.device,
-                                           [&dev = device, &but = button](bool success, System::BluetoothDevice&)
-                                           {
-                                               deviceMutex.lock();
-                                               if (!success)
-                                               {
-                                                   dev.state &= ~DeviceState::RequestDisconnect;
-                                                   dev.state |= DeviceState::Failed;
-                                                   but.AddClass("failed");
-                                               }
-                                               deviceMutex.unlock();
-                                           });
+                device.request = requestDevice;
+                System::DisconnectBTDevice(*requestDevice, onFinish);
             }
         }
 
@@ -114,21 +125,21 @@ namespace BluetoothDevices
             }
 
             button.OnClick(
-                [&dev = device](Button& button)
+                [mac = device.device.mac](Button& button)
                 {
-                    OnClick(button, dev);
+                    auto it = std::find_if(devices.begin(), devices.end(),
+                                           [&](const auto& current) { return current.device.mac == mac; });
+                    if (it != devices.end())
+                        OnClick(button, *it);
                 });
         }
 
         void InvalidateDeviceUI()
         {
             // Shrink
-            if (deviceListBox->GetChilds().size() > devices.size())
+            while (deviceListBox->GetChilds().size() > devices.size())
             {
-                for (size_t i = deviceListBox->GetChilds().size() - 1; i >= devices.size(); i--)
-                {
-                    deviceListBox->RemoveChild(i);
-                }
+                deviceListBox->RemoveChild(deviceListBox->GetChilds().size() - 1);
             }
 
             size_t idx = 0;

@@ -1,6 +1,8 @@
 #pragma once
 #include <atomic>
 #include <algorithm>
+#include <cerrno>
+#include <chrono>
 #include <cstdlib>
 #include <iostream>
 #include <optional>
@@ -102,7 +104,7 @@ namespace Utils
     }
 
     template<typename Func>
-    size_t RetrySocketOp(Func func, size_t retries, const char* socketOp)
+    ssize_t RetrySocketOp(Func func, size_t retries, const char* socketOp)
     {
         ssize_t ret;
         size_t tries = 0;
@@ -111,16 +113,21 @@ namespace Utils
             ret = func();
             if (ret < 0)
             {
-                // Error
-                LOG("RetrySocketOp: " << socketOp << " failed with " << ret);
+                const int error = errno;
+                LOG("RetrySocketOp: " << socketOp << " failed with errno " << error);
+                if (++tries >= retries || (error != EINTR && error != EAGAIN && error != EWOULDBLOCK))
+                {
+                    errno = error;
+                    return ret;
+                }
+                if (error != EINTR)
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
             }
             else
             {
                 return ret;
             }
-            tries++;
         } while (tries < retries);
-        LOG("RetrySocketOp: Failed after " << retries << "tries");
         return ret;
     }
 
@@ -207,9 +214,8 @@ template<typename Data, typename Callback>
 inline void ExecuteAsyncAtomically(AsyncAtomicContext<Data>& context, const Callback& callback, const Data& data)
 {
     // Update the queue
-    context.queueLock.lock();
+    std::lock_guard<std::mutex> lock(context.queueLock);
     context.queue = data;
-    context.queueLock.unlock();
 
     if (!context.running)
     {
@@ -220,20 +226,19 @@ inline void ExecuteAsyncAtomically(AsyncAtomicContext<Data>& context, const Call
             {
                 while (true)
                 {
-                    context.queueLock.lock();
+                    std::unique_lock<std::mutex> lock(context.queueLock);
                     if (!context.queue.has_value())
                     {
-                        context.queueLock.unlock();
+                        context.running = false;
                         break;
                     }
                     Data data = std::move(*context.queue);
                     context.queue = {};
-                    context.queueLock.unlock();
+                    lock.unlock();
 
                     // Execute
                     callback(std::move(data));
                 }
-                context.running = false;
             })
             .detach();
     }
