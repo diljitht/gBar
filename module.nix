@@ -139,6 +139,16 @@ in {
                     default = "%a %D - %H:%M:%S %Z";
                     description = "Set datetime style";
                 };
+                DateTimeStyleFull = mkOption {
+                    type = types.str;
+                    default = "%a %D - %H:%M:%S %Z";
+                    description = "Revealed beside DateTimeStyle while hovering the time widget when TimeFullOnHover is true";
+                };
+                TimeFullOnHover = mkOption {
+                    type = types.bool;
+                    default = false;
+                    description = "Reveal dateTimeStyleFull beside dateTimeStyle while hovering over the time widget";
+                };
                 DateTimeLocale = mkOption {
                     type = types.nullOr types.str;
                     default = "";

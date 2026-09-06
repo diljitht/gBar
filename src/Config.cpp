@@ -261,6 +261,7 @@ void Config::Load(const std::string& overrideConfigLocation)
         AddConfigVar("BatteryFolder", config.batteryFolder, lineView, foundProperty);
         AddConfigVar("DefaultWorkspaceSymbol", config.defaultWorkspaceSymbol, lineView, foundProperty);
         AddConfigVar("DateTimeStyle", config.dateTimeStyle, lineView, foundProperty);
+        AddConfigVar("DateTimeStyleFull", config.dateTimeStyleFull, lineView, foundProperty);
         AddConfigVar("DateTimeLocale", config.dateTimeLocale, lineView, foundProperty);
         AddConfigVar("CheckPackagesCommand", config.checkPackagesCommand, lineView, foundProperty);
         AddConfigVar("DiskPartition", config.diskPartition, lineView, foundProperty);
@@ -286,6 +287,7 @@ void Config::Load(const std::string& overrideConfigLocation)
 
         AddConfigVar("ForceCSS", config.forceCSS, lineView, foundProperty);
         AddConfigVar("CenterWidgets", config.centerWidgets, lineView, foundProperty);
+        AddConfigVar("TimeFullOnHover", config.timeFullOnHover, lineView, foundProperty);
         AddConfigVar("AudioInput", config.audioInput, lineView, foundProperty);
         AddConfigVar("AudioRevealer", config.audioRevealer, lineView, foundProperty);
         AddConfigVar("AudioNumbers", config.audioNumbers, lineView, foundProperty);

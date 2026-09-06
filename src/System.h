@@ -114,7 +114,8 @@ namespace System
     // This can only be called one at a time. If it is already running it is assumed, that the old handler is no longer valid.
     void GetOutdatedPackagesAsync(std::function<void(uint32_t)>&& returnVal);
 
-    std::string GetTime();
+    // Get the current time. If format is empty, the configured DateTimeStyle is used.
+    std::string GetTime(const std::string& format = "");
 
     std::string GetActiveWindowTitle();
 

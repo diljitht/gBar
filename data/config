@@ -131,6 +131,11 @@ CenterSpace: 300
 # Set datetime style
 DateTimeStyle: %a %D - %H:%M:%S %Z
 
+# While hovering the time widget, reveal DateTimeStyleFull beside the (fixed) DateTimeStyle.
+# E.g. with DateTimeStyle "%I:%M %p" and DateTimeStyleFull "%a, %d/%m/%y" the date slides in on hover.
+#TimeFullOnHover: true
+#DateTimeStyleFull: %a, %d/%m/%y
+
 # Set datetime locale (defaults to system locale if not set or set to empty string)
 #DateTimeLocale: de_DE.utf8
 

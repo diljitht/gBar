@@ -23,8 +23,9 @@ public:
     std::string batteryFolder = ""; // this can be BAT0, BAT1, etc. Usually in /sys/class/power_supply
     std::map<uint32_t, std::string> workspaceSymbols;
     std::string defaultWorkspaceSymbol = "";
-    std::string dateTimeStyle = "%a %D - %H:%M:%S %Z"; // A sane default
-    std::string dateTimeLocale = "";                   // use system locale
+    std::string dateTimeStyle = "%a %D - %H:%M:%S %Z";          // A sane default
+    std::string dateTimeStyleFull = "%a %D - %H:%M:%S %Z";      // Shown on hover when timeFullOnHover is set
+    std::string dateTimeLocale = "";                            // use system locale
     std::string diskPartition = "/";                   // should be expectable on every linux system
 
     // Icons
@@ -57,6 +58,7 @@ public:
 
     bool forceCSS = false;     // Whether to disable loading SCSS directly.
     bool centerWidgets = true; // Force the center widgets to be in the center.
+    bool timeFullOnHover = false; // Show dateTimeStyleFull when hovering the time widget
     bool audioRevealer = false;
     bool audioInput = false;
     bool audioNumbers = false;         // Affects both audio sliders

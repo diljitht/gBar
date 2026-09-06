@@ -1140,14 +1140,73 @@ namespace Bar
 
     void WidgetTime(Widget& parent, Side side)
     {
-        auto time = Widget::Create<Text>();
-        Utils::SetTransform(*time, {-1, side == Side::Center, SideToAlignment(side)});
-        time->SetAngle(Utils::GetAngle());
-        time->SetClass("widget");
-        time->AddClass("time-text");
-        time->SetText("Uninitialized");
-        time->AddTimer<Text>(DynCtx::UpdateTime, 1000);
-        parent.AddChild(std::move(time));
+        if (!Config::Get().timeFullOnHover)
+        {
+            auto time = Widget::Create<Text>();
+            Utils::SetTransform(*time, {-1, side == Side::Center, SideToAlignment(side)});
+            time->SetAngle(Utils::GetAngle());
+            time->SetClass("widget");
+            time->AddClass("time-text");
+            time->SetText("Uninitialized");
+            time->AddTimer<Text>(DynCtx::UpdateTime, 1000);
+            parent.AddChild(std::move(time));
+            return;
+        }
+
+        auto eventBox = Widget::Create<EventBox>();
+        Utils::SetTransform(*eventBox, {-1, side == Side::Center, SideToAlignment(side)});
+        eventBox->SetClass("widget");
+        // Put the event box window above its children, so the revealer animation
+        // doesn't fire enter/leave crossings that make the reveal flicker on hover.
+        eventBox->SetOnCreate(
+            [](Widget& w)
+            {
+                gtk_event_box_set_above_child((GtkEventBox*)w.Get(), TRUE);
+            });
+        {
+            auto box = Widget::Create<Box>();
+            box->SetSpacing({5, false});
+            box->SetOrientation(Utils::GetOrientation());
+            {
+                // The date is revealed to the left of the (fixed) time on hover.
+                auto revealer = Widget::Create<Revealer>();
+                revealer->SetTransition({Utils::GetTransitionType(SideToDefaultTransition(side)), 500});
+                // Add event to eventbox for the revealer to open
+                eventBox->SetHoverFn(
+                    [timeRevealer = revealer.get()](EventBox&, bool hovered)
+                    {
+                        timeRevealer->SetRevealed(hovered);
+                    });
+                auto timeFull = Widget::Create<Text>();
+                Utils::SetTransform(*timeFull, {-1, true, Alignment::Fill});
+                timeFull->SetAngle(Utils::GetAngle());
+                timeFull->SetClass("widget");
+                timeFull->AddClass("time-text");
+                timeFull->SetText("Uninitialized");
+                timeFull->AddTimer<Text>(
+                    [](Text& text)
+                    {
+                        text.SetText(System::GetTime(Config::Get().dateTimeStyleFull));
+                        return TimerResult::Ok;
+                    },
+                    1000);
+                revealer->AddChild(std::move(timeFull));
+                box->AddChild(std::move(revealer));
+            }
+            {
+                // The time stays fixed, regardless of whether the date is revealed or not.
+                auto time = Widget::Create<Text>();
+                Utils::SetTransform(*time, {-1, true, Alignment::Fill});
+                time->SetAngle(Utils::GetAngle());
+                time->SetClass("widget");
+                time->AddClass("time-text");
+                time->SetText("Uninitialized");
+                time->AddTimer<Text>(DynCtx::UpdateTime, 1000);
+                box->AddChild(std::move(time));
+            }
+            eventBox->AddChild(std::move(box));
+        }
+        parent.AddChild(std::move(eventBox));
     }
 
     void WidgetTitle(Widget& parent, Side side)

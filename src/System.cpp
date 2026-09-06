@@ -622,13 +622,14 @@ namespace System
             .detach();
     }
 
-    std::string GetTime()
+    std::string GetTime(const std::string& format)
     {
         time_t stdTime = time(NULL);
         tm* localTime = localtime(&stdTime);
         std::stringstream str;
         str.imbue(std::locale(Config::Get().dateTimeLocale.c_str()));
-        str << std::put_time(localTime, Config::Get().dateTimeStyle.c_str());
+        str << std::put_time(localTime,
+                             format == "" ? Config::Get().dateTimeStyle.c_str() : format.c_str());
         return str.str();
     }
 
