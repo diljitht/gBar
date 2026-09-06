@@ -38,37 +38,32 @@ namespace System
         std::ifstream procstat("/proc/stat");
         ASSERT(procstat.is_open(), "Cannot open /proc/stat");
 
-        std::string curLine;
-        while (std::getline(procstat, curLine))
+        std::string line;
+        while (std::getline(procstat, line))
         {
-            if (curLine.find("cpu ") != std::string::npos)
-            {
-                // Found it
-                std::stringstream lineStr(curLine.substr(5));
-                std::string curLine;
-                uint32_t idx = 1;
-                size_t total = 0;
-                size_t idle = 0;
-                while (std::getline(lineStr, curLine, ' '))
-                {
-                    if (idx == 4)
-                    {
-                        // Fourth col is idle
-                        idle = atoi(curLine.c_str());
-                    }
-                    total += atoi(curLine.c_str());
-                    idx++;
-                }
-                prevCPUTime = curCPUTime;
-                curCPUTime.total = total;
-                curCPUTime.idle = idle;
-                break;
-            }
+            // The "cpu " line (with a space) is the aggregate; skip "cpu0", "cpu1", ...
+            if (line.rfind("cpu ", 0) != 0)
+                continue;
+
+            // Format: cpu user nice system idle iowait irq softirq steal guest guest_nice
+            std::istringstream lineStr(line.substr(4));
+            size_t user, nice, system, idle, iowait, irq, softirq, steal, guest, guestNice;
+            if (!(lineStr >> user >> nice >> system >> idle >> iowait >> irq >> softirq >> steal
+                          >> guest >> guestNice))
+                continue;
+
+            prevCPUTime = curCPUTime;
+            curCPUTime.total = user + nice + system + idle + iowait + irq + softirq + steal
+                + guest + guestNice;
+            curCPUTime.idle = idle;
+            break;
         }
 
         // Get diffs and percentage of idle time
         size_t diffTotal = curCPUTime.total - prevCPUTime.total;
         size_t diffIdle = curCPUTime.idle - prevCPUTime.idle;
+        if (diffTotal == 0)
+            return 0;
         return 1 - ((double)diffIdle / (double)diffTotal);
     }
 
