@@ -7,12 +7,12 @@ My personal blazingly fast and efficient status bar + widgets, in case anyone fi
 *If you don't have the optional dependencies, some features are not available.*
 - wayland
 - Hyprland(Optional -> For workspaces widget)
-- nvidia-utils(Optional -> For Nvidia GPU status)
 - bluez(Optional -> For Bluetooth status)
 - GTK 3.0
 - gtk-layer-shell
-- PulseAudio server (PipeWire works too!)
-- pamixer
+- PipeWire (with WirePlumber, provides `wpctl` for the audio/mic widget)
+- libpipewire-0.3
+- libspa-0.2
 - libsass
 - meson, gcc/clang, ninja
 
@@ -104,7 +104,7 @@ gBar bluetooth [monitor]
 ## Features / Widgets
 Bar: 
 - Workspaces (Hyprland only. Technically works on all compositors implementing ext_workspace when ```UseHyprlandIPC``` is false, though workspace control relies on Hyprland)
-- Time
+- Time (can reveal a longer date style on hover, see `TimeFullOnHover` and `DateTimeStyleFull`)
 - Title of the focused Window
 - Bluetooth (BlueZ only)
 - Audio control
@@ -118,7 +118,7 @@ Bar:
 - Battery: Capacity
 - CPU stats: Utilisation, temperature (Temperature requires manual setup, see FAQ)
 - RAM: Utilisation
-- GPU stats (Nvidia/AMD only): Utilisation, temperature, VRAM
+- GPU stats (AMD only): Utilisation, temperature, VRAM
 - Disk: Free/Total
 - Network: Current upload and download speed
 - Update checking (Non-Arch systems need to be configured manually)
