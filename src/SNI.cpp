@@ -420,7 +420,7 @@ namespace SNI
         container->AddTimer<Box>(UpdateWidgets, 1000, TimerDispatchBehaviour::LateDispatch);
         container->SetSpacing({4, false});
         container->SetOrientation(Utils::GetOrientation());
-        Utils::SetTransform(*container, {-1, true, Alignment::Fill, 0, 8});
+        Utils::SetTransform(*container, {-1, true, Alignment::Fill});
 
         iconBox = container.get();
         parentBox = box.get();
