@@ -2,7 +2,7 @@
 # Fork of gBar by scorpion-26, original: https://github.com/scorpion-26/gBar
 
 _pkgname=gBar
-pkgname=gbar-git
+pkgname=gbar-forked-git
 pkgver=r257.b1e2c2e
 pkgrel=1
 # Architectures which are atleast confirmed to somewhat work.
