@@ -5,12 +5,31 @@
 
 .popup {
   background-color: #282a36;
-  color: #50fa7b;
+  color: #f8f8f2;
   border-radius: 16px;
 }
 
 menu {
+  background-color: #282a36;
+  color: #f8f8f2;
   padding: 8px 8px 8px 8px;
+}
+
+menu separator {
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  background-color: transparent;
+}
+
+menu menuitem {
+  color: #f8f8f2;
+}
+
+menu menuitem:hover,
+menu menuitem:selected {
+  background-color: #bd93f9;
+  color: #282a36;
 }
 
 .bar, tooltip {

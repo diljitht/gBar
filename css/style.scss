@@ -24,12 +24,31 @@ $textsize: 16px;
 
 .popup {
     background-color: $bg;
-    color: #50fa7b;
+    color: $fg;
     border-radius: 16px;
 }
 
 menu {
+    background-color: $bg;
+    color: $fg;
     padding: 8px 8px 8px 8px;
+}
+
+menu separator {
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    background-color: transparent;
+}
+
+menu menuitem {
+    color: $fg;
+}
+
+menu menuitem:hover,
+menu menuitem:selected {
+    background-color: $purple;
+    color: $bg;
 }
 
 // debug
