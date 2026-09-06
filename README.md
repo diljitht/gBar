@@ -1,31 +1,24 @@
 # gBar
-A blazingly fast and efficient status bar + widgets, in case anyone finds a use for it.
 
-*gBar: **G**TK **Bar***
+A fork of [scorpion-26/gBar](https://github.com/scorpion-26/gBar). Thanks to scorpion-26 for the original project.
 
-## Credits
-gBar is a fork of the original [gBar](https://github.com/scorpion-26/gBar) by [scorpion-26](https://github.com/scorpion-26).
-Many thanks to the original author for creating such a great project.
+This README documents only changes from the original. For shared features, general build and usage instructions, configuration, styling, plugins, and troubleshooting, see the [original README](https://github.com/scorpion-26/gBar#readme). Apply the fork-specific dependency and path changes below when following those instructions.
 
-## Differences from upstream
+## Changes from upstream
 
-This comparison is based on this fork at [`e5d5af6`](https://github.com/diljitht/gBar/commit/e5d5af6)
-and the original project's `master` at [`03bedc7`](https://github.com/scorpion-26/gBar/commit/03bedc7471add061fb15e0ca1c9d2f729b8c5d7b),
-checked on September 6, 2026. It describes code differences, not a guarantee of compatibility with every compositor or device.
+Compared with upstream [`03bedc7`](https://github.com/scorpion-26/gBar/commit/03bedc7471add061fb15e0ca1c9d2f729b8c5d7b), checked on September 6, 2026. The implementation described here is this fork at [`e5d5af6`](https://github.com/diljitht/gBar/commit/e5d5af6).
 
 ### Features and behavior
 
-| Area | Original scorpion-26/gBar | This fork |
-| --- | --- | --- |
-| Clock | One configurable date/time label. | Optional animated additional date/time label on hover, while keeping the normal clock visible. Enable `TimeFullOnHover` and configure `DateTimeStyleFull`. |
-| Hyprland scratchpads | Regular workspace indicators only. | Named special-workspace buttons in a separate group; clicking a button toggles that scratchpad. Long names do not stretch regular workspace buttons. Requires `UseHyprlandIPC: true`. |
-| Workspace commands | Legacy `hyprctl dispatch workspace` commands. | Tries Lua-style `hl.dsp` commands first, with a legacy fallback when the command fails. Intended for newer Hyprland versions. |
-| Audio backend | Reads audio state through `libpulse` and changes volume/mute through `pamixer`. | Reads audio state directly through PipeWire/SPA and changes volume/mute asynchronously through WirePlumber's `wpctl`. |
-| GPU monitoring | AMD and NVIDIA support. | AMD support retained; NVIDIA implementation and `WithNvidia` Meson option removed. |
-| Tray menus | Upstream menu styling. | Adjusted menu backgrounds, text, selection colors and separators, plus removal of a fixed tray-container offset. |
-| Popup locking | Presence of `/tmp/gBar__audio` or `/tmp/gBar__bluetooth` prevents another instance. | Process-owned locks in `XDG_RUNTIME_DIR`, released when the process exits, including after a crash. Audio and microphone popups share a lock. |
+- **Clock hover:** An optional animated additional date/time label appears on hover while the normal clock stays visible. `TimeFullOnHover` defaults to `false`; `DateTimeStyleFull` controls the additional label.
+- **Hyprland scratchpads:** Special workspaces appear as named buttons in a separate group. Clicking toggles the scratchpad, and long names do not stretch regular workspace buttons. Requires `UseHyprlandIPC: true`.
+- **Workspace commands:** Lua-style `hl.dsp` commands are attempted first, with legacy command fallback on failure, for compatibility with newer Hyprland versions.
+- **Audio backend:** Direct PipeWire/SPA monitoring replaces `libpulse`; asynchronous `wpctl` commands replace `pamixer` for volume and mute changes.
+- **GPU monitoring:** NVIDIA support and the `WithNvidia` Meson option are removed. AMD support is retained.
+- **Tray styling:** Menu backgrounds, text, selection colors, and separators are adjusted, and a fixed tray-container offset is removed.
+- **Popup locking:** Process-owned locks in `XDG_RUNTIME_DIR` replace `/tmp` sentinel files. Locks are released when the process exits, including after a crash. Audio and microphone popups share a lock.
 
-Clock hover is **opt-in** and defaults to disabled. For a short clock with an additional date on hover:
+Example configuration for the new clock-hover behavior:
 
 ```text
 DateTimeStyle: %H:%M
@@ -33,224 +26,29 @@ TimeFullOnHover: true
 DateTimeStyleFull: %a, %d/%m/%y
 ```
 
-Scratchpad buttons use their real Hyprland names rather than a configurable generic label.
-The `ws-special-active` and `ws-special-inactive` CSS classes are separate, but both use bold purple text in the shipped theme.
+Scratchpad buttons display their actual Hyprland names. The `ws-special-active` and `ws-special-inactive` CSS classes are separate, but both use bold purple text in the shipped theme.
 
-### Reliability improvements
+### Reliability fixes
 
-- Package results are delivered on the GTK main loop with widget-lifetime checks; malformed output and failed commands are handled without terminating the bar.
+- Package results are delivered on the GTK main loop with widget-lifetime checks; malformed output and failed commands do not terminate the bar.
 - Bluetooth operations retain stable device data and ignore obsolete completions; tray callbacks check item lifetime and validate received pixmap data.
-- Widget teardown cleans up timers and image references, and scratchpad button references are reset when the bar is recreated.
+- Widget teardown cleans up timers and image references; scratchpad button references are reset when the bar is recreated.
 - Hyprland IPC handles partial writes, closes sockets on errors, validates socket-path length, avoids SIGPIPE, and limits each exchange to two seconds.
 - CPU sampling establishes an initial baseline and avoids double-counting guest time; disk/network failures and counter resets are handled more safely.
 - Numeric configuration parsing validates complete values and ranges, supports CRLF files, and fixes inline-comment truncation.
 - Popup shutdown handles SIGINT/SIGTERM through the main loop; monitor-change shutdown races and bottom-margin storage are corrected.
 
-### Build and packaging
+### Build and packaging changes
 
-- Audio dependencies change from `libpulse`/`pamixer` to `libpipewire-0.3`, `libspa-0.2`, and WirePlumber's `wpctl`. Audio control still launches an external command; it is not entirely native PipeWire control.
-- The fork includes an Arch `PKGBUILD` targeting this repository. Ensure WirePlumber is installed for `wpctl`; the current package dependency list does not explicitly include it.
-- The original Nix flake, Home Manager module, and Nix CI integration are removed. This fork does not ship a replacement Nix setup.
-- The plugin example moves from `example/` to `examples/`, and the package-update helper moves from `data/update.sh` to `scripts/update.sh`.
-- Meson/Ninja, C++17, GTK3, gtk-layer-shell, and CSS/SCSS customization remain in use.
+- Use this repository, `https://github.com/diljitht/gBar`, instead of the upstream clone URL.
+- Replace `libpulse`/`pamixer` dependencies with `libpipewire-0.3`, `libspa-0.2`, and WirePlumber's `wpctl`. Audio control still launches an external command; it is not entirely native PipeWire control.
+- An Arch [PKGBUILD](PKGBUILD) targeting this fork is included; install with `makepkg -si`. Ensure WirePlumber is installed for `wpctl`, since the package dependency list does not explicitly include it.
+- The upstream Nix flake, Home Manager module, and Nix CI integration are removed; no replacement Nix setup is shipped.
+- The plugin example moves from `example/` to [examples/](examples/), and the package-update helper moves from `data/update.sh` to [scripts/update.sh](scripts/update.sh).
 
-### Inherited features and limitations
+### Fork-specific caveats
 
-Regular workspace indicators, the clock, focused-window title, audio/microphone controls and fly-ins,
-Bluetooth, tray icons, system sensors, power actions, configurable widget placement, and native plugins
-already exist upstream. They are not new features introduced by this fork. The default left/center/right
-widget arrangement is also retained.
-
-The direct PipeWire backend does not yet fully handle default-device changes or device removal;
-audio monitoring/control can remain attached to an earlier device. Special-workspace names containing
-quotes or shell metacharacters are not safely escaped in toggle commands and should be avoided.
-Workspace polling still uses synchronous IPC, so its timeout bounds UI stalls rather than eliminating them.
-
-## Prerequisites 
-*If you don't have the optional dependencies, some features are not available.*
-- wayland
-- Hyprland(Optional -> For workspaces widget)
-- bluez(Optional -> For Bluetooth status)
-- GTK 3.0
-- gtk-layer-shell
-- PipeWire (with WirePlumber, provides `wpctl` for the audio/mic widget)
-- libpipewire-0.3
-- libspa-0.2
-- libsass
-- meson, gcc/clang, ninja
-
-## Building and installation (Manually)
-1. Clone gBar
-    ```
-    git clone https://github.com/diljitht/gBar
-    ```
-2. Configure with meson
-    
-    *All optional dependencies enabled*
-    ```
-    meson setup build
-    ```
-3. Build and install
-    ```
-    ninja -C build && sudo ninja -C build install
-    ```
-
-## Building and installation (Arch Linux)
-For Arch systems, use the PKGBUILD file and install it with `makepkg -si`
-
-## Running gBar
-*Open bar on monitor "DP-1"*
-```
-gBar bar DP-1
-```
-*Open bar on monitor 0 (Legacy way of specifying the monitor)*
-```
-gBar bar 0
-```
-*Open audio flyin (either on current monitor or on the specified monitor)*
-```
-gBar audio [monitor]
-```
-*Open microphone flyin, this is equivalent to the audio flyin*
-```
-gBar mic [monitor]
-```
-*Open bluetooth widget*
-```
-gBar bluetooth [monitor]
-```
-
-## Gallery
-![The bar with default css](/assets/bar.png)
-
-*Bar with default css*
-
-![The audio flyin with default css](/assets/audioflyin.png)
-
-*Audio widget with default css*
-
-![The bluetooth widget with default css](/assets/bt.png)
-
-*Bluetooth widget with default css*
-
-## Features / Widgets
-Bar: 
-- Workspaces (Hyprland only. Technically works on all compositors implementing ext_workspace when ```UseHyprlandIPC``` is false, though workspace control relies on Hyprland)
-- Time (can reveal a longer date style on hover, see `TimeFullOnHover` and `DateTimeStyleFull`)
-- Title of the focused Window
-- Bluetooth (BlueZ only)
-- Audio control
-- Microphone control
-- Power control
-   - Shutdown
-   - Restart
-   - Suspend
-   - Lock (Requires manual setup, see FAQ)
-   - Exit/Logout (Hyprland only)
-- Battery: Capacity
-- CPU stats: Utilisation, temperature (Temperature requires manual setup, see FAQ)
-- RAM: Utilisation
-- GPU stats (AMD only): Utilisation, temperature, VRAM
-- Disk: Free/Total
-- Network: Current upload and download speed
-- Update checking (Non-Arch systems need to be configured manually)
-- Tray icons
-
-Bluetooth:
- - Scanning of nearby bluetooth devices
- - Pairing and connecting
-
-Audio Flyin: 
-- Audio control
-- Microphone control
-
-## Configuration for your system
-Copy the example config (found under data/config) into ~/.config/gBar/config and modify it to your needs.
-
-## Plugins
-gBar utilizes a plugin system for custom widgets anyone can create without modifying the source code.
-Plugins are native shared-libraries, which need to be placed inside ```~/.local/lib/gBar```, ```/usr/lib/gBar``` or ```/usr/local/lib/gBar```.
-Inside examples/ there is an example plugin setup. To build and run it, run the following commands inside the examples directory:
-
-```
-meson setup build -Dprefix=~/.local
-```
-for the local user
-OR 
-```
-meson setup build
-``` 
-for all users
-
-```
-ninja -C build install
-gBar gBarHelloWorld
-```
-The second argument is the name of the shared library (without 'lib' and '.so').
-
-For more examples on how to use the gBar API, you can have a look at the built-in widgets (AudioFlyin.cpp, BluetoothDevices.cpp, Bar.cpp) as they use the same API.
-
-## FAQ
-### There are already many GTK bars out there, why not use them?
-- Waybar: 
-Great performance, though limited styling(Almost no dynamic sliders, revealers, ...) and buggy css.
-- eww: 
-Really solid project with many great customization options. There is one problem though: Performance.\
-Due to the way eww configuration is set up, for each dynamic variable (the number of them quickly grows) you need a shell command which opens a process. 
-This became quickly a bottleneck, where the bar took up 10% of the CPU-time due to the creation of many processes all the time (without even considering the workspace widget).
-gBar implements all of the information gathering(CPU, RAM, GPU, Disk, ...) in native C++ code, which is WAY faster. In fact, gBar was meant to be a fast replacement/alternative for eww.
-
-And lastly: Implementing it was a great excuse to learn something new!
-
-### Can you implement feature XYZ? / I've found a bug. Can you fix it?
-This project is meant to be easily used by others without bugs or a complicated setup. This means the following:
- -  If you found a bug, please [open an issue](https://github.com/diljitht/gBar/issues/new/choose) and it will be fixed as quickly as possible.
- -  If you're missing a particular feature, please [open an issue](https://github.com/diljitht/gBar/issues/new/choose) as well; although nothing is guaranteed, small requests or useful features will probably be implemented in a timely fashion.
-
-
-### What scheme are you using?
-The colors are from the Dracula theme: https://draculatheme.com
-
-### I want to customize the colors
-First, find where the data is located for gBar. Possible locations: 
- - In a 'gBar' directory found in any of the directories listed by `echo $XDG_DATA_DIRS`
- - /usr/share/gBar
- - /usr/local/share/gBar
- - ~/.local/share/gBar
- - If you cloned this repository locally: Inside css/
-
- Copy the scss and css files from within the data directory into ~/.config/gBar. e.g.:
- ```
- mkdir ~/.config/gBar/
- cp /usr/local/share/gBar/* ~/.config/gBar/
- ```
- This will override the default behaviour. If you have sass installed, you can modify the scss file and then regenerate the css file accordingly. Else modify the css file directly.
-
-### The margins of the bar are inconsistent/messed up / Custom CSS broke.
-If you have a custom style.[s]css, make sure that the margins/names/... are the same as the ones found in ```css/style.scss``` / ```css/style.css```.\
-If you've checked the css against upstream gBar and the issue persists, please [open an issue](https://github.com/scorpion-26/gBar/issues/new/choose).\
-Major (breaking) changes to the css:
- - [f78758c](https://github.com/scorpion-26/gBar/commit/f78758c4eedb022ae49fbecf2f2505f9672d0b9d): Margins are no longer used in the default css. If you didn't play around with margins, you can safely remove them from your css.\
- - [56c53c4](https://github.com/scorpion-26/gBar/commit/56c53c49cdbd7fac11726a5b7ab12f1e6490a211): The lock icon now has its own selector, causing wrong styling when using an outdated css. This can be fixed by including the default ```.lock-button``` section into your css.
-
-### The Audio/Bluetooth widget doesn't open
-Check the terminal output and ensure `XDG_RUNTIME_DIR` points to an absolute, private directory owned by your user, normally supplied by your login session.
-Only one audio/microphone popup and one Bluetooth popup can run at a time; a second launch exits without closing the existing popup.
-The lock files are `gBar__audio.lock` and `gBar__bluetooth.lock` inside `XDG_RUNTIME_DIR`.
-They intentionally remain on disk, but the locks are released when the owning process exits, even after a crash.
-Do not delete lock files while a widget is running. Old `/tmp/gBar__audio` and `/tmp/gBar__bluetooth` markers are no longer used by this fork.
-
-### CPU Temperature is wrong / Lock doesn't work / Exiting WM does not work
-See *Configuration for your system*
-
-### The icons are not showing!
-Please install a Nerd Font from https://www.nerdfonts.com, and change css/style.css / css/style.scss accordingly (Refer to 'I want to customize the colors' for that). You _will_ need a Nerd Font with version 2.3.0 or newer (For more details see [this comment](https://github.com/scorpion-26/gBar/issues/5#issuecomment-1442037005))
-
-### The tray doesn't show
-Some apps sometimes don't actively query for tray applications. A fix for this is to start gBar before the tray app
-If it still doesn't show, please open an issue with your application.
-The tray icons are confirmed to work with Discord, Telegram, OBS, Steam and KeePassXC
-
-### Clicking on the tray opens a glitchy transparent menu
-~This is semi-intentional and a known bug (See https://github.com/scorpion-26/gBar/pull/12#issuecomment-1529143790 for an explanation). You can make it opaque by setting the background-color property of .popup in css/style.css / css/style.scss~\
-As of [bc0281c](https://github.com/scorpion-26/gBar/commit/bc0281ca5321cb6e72ab6d295c790ae10d7eec7e) this is now fixed! For things to look properly you may want to update your css (Specifically the selectors ```.popup``` and ```menu```)
+- The direct PipeWire backend does not yet fully handle default-device changes or device removal; monitoring/control can remain attached to an earlier device.
+- Special-workspace names containing quotes or shell metacharacters are not safely escaped in toggle commands and should be avoided.
+- Workspace polling still uses synchronous IPC: the timeout bounds UI stalls rather than eliminating them.
+- Audio/microphone and Bluetooth popups require an absolute, private, user-owned `XDG_RUNTIME_DIR`. Their `gBar__audio.lock` and `gBar__bluetooth.lock` files intentionally remain on disk after exit. Do not delete them while a widget is running. Upstream advice to remove `/tmp/gBar__audio` or `/tmp/gBar__bluetooth` does not apply to this fork.
