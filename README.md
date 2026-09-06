@@ -37,9 +37,7 @@ Many thanks to the original author for creating such a great project.
     ```
 
 ## Building and installation (AUR)
-For Arch systems, gBar can be found on the AUR.
-You can install it e.g.: with yay
-```yay -S gbar-git```
+For Arch systems, use the PKGBUILD file and install it with `makepkg -si`
 
 ## Running gBar
 *Open bar on monitor "DP-1"*
