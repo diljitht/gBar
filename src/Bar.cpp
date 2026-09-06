@@ -144,7 +144,7 @@ namespace Bar
             return TimerResult::Ok;
         }
 
-#if defined WITH_NVIDIA || defined WITH_AMD
+#ifdef WITH_AMD
         static Text* gpuText;
         static TimerResult UpdateGPU(Sensor& sensor)
         {
@@ -179,7 +179,7 @@ namespace Bar
             {
                 vramText->SetText(text);
             }
-            sensor.SetValue(info.usedGiB / info.totalGiB);
+            sensor.SetValue(info.totalGiB > 0 ? info.usedGiB / info.totalGiB : 0);
             return TimerResult::Ok;
         }
 #endif
@@ -881,8 +881,8 @@ namespace Bar
         box->SetClass("sensors");
         {
             WidgetSensor(*box, DynCtx::UpdateDisk, "disk", DynCtx::diskText, side);
-#if defined WITH_NVIDIA || defined WITH_AMD
-            if (RuntimeConfig::Get().hasNvidia || RuntimeConfig::Get().hasAMD)
+#ifdef WITH_AMD
+            if (RuntimeConfig::Get().hasAMD)
             {
                 WidgetSensor(*box, DynCtx::UpdateVRAM, "vram", DynCtx::vramText, side);
                 WidgetSensor(*box, DynCtx::UpdateGPU, "gpu", DynCtx::gpuText, side);
@@ -1228,16 +1228,16 @@ namespace Bar
         }
         if (widgetName == "VRAM")
         {
-#if defined WITH_NVIDIA || defined WITH_AMD
-            if (RuntimeConfig::Get().hasNvidia || RuntimeConfig::Get().hasAMD)
+#ifdef WITH_AMD
+            if (RuntimeConfig::Get().hasAMD)
                 WidgetSensor(parent, DynCtx::UpdateVRAM, "vram", DynCtx::vramText, side);
             return;
 #endif
         }
         if (widgetName == "GPU")
         {
-#if defined WITH_NVIDIA || defined WITH_AMD
-            if (RuntimeConfig::Get().hasNvidia || RuntimeConfig::Get().hasAMD)
+#ifdef WITH_AMD
+            if (RuntimeConfig::Get().hasAMD)
                 WidgetSensor(parent, DynCtx::UpdateGPU, "gpu", DynCtx::gpuText, side);
             return;
 #endif

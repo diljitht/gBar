@@ -85,10 +85,6 @@ if get_option('WithLibSass')
   add_global_arguments('-DWITH_LIBSASS', language: 'cpp')
   dependencies += dependency('libsass')
 endif
-if get_option('WithNvidia')
-  add_global_arguments('-DWITH_NVIDIA', language: 'cpp')
-  headers += 'src/NvidiaGPU.h'
-endif
 if get_option('WithAMD')
   add_global_arguments('-DWITH_AMD', language: 'cpp')
   headers += 'src/AMDGPU.h'

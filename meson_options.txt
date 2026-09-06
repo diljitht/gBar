@@ -10,6 +10,5 @@ option('WithLibSass', type: 'boolean', value : true)
 # Tray icons
 option('WithSNI', type: 'boolean', value : true)
 
-option('WithNvidia', type: 'boolean', value : true)
 option('WithAMD', type: 'boolean', value : true)
 option('WithBlueZ', type: 'boolean', value : true)

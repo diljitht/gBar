@@ -105,11 +105,6 @@ public:
 class RuntimeConfig
 {
 public:
-#ifdef WITH_NVIDIA
-    bool hasNvidia = true;
-#else
-    bool hasNvidia = false;
-#endif
 #ifdef WITH_AMD
     bool hasAMD = true;
 #else

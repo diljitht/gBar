@@ -167,19 +167,9 @@ namespace System
         return out;
     }
 
-#if defined WITH_NVIDIA || defined WITH_AMD
+#ifdef WITH_AMD
     GPUInfo GetGPUInfo()
     {
-#ifdef WITH_NVIDIA
-        if (RuntimeConfig::Get().hasNvidia)
-        {
-            NvidiaGPU::GPUUtilization util = NvidiaGPU::GetUtilization();
-            GPUInfo out;
-            out.utilisation = util.gpu;
-            out.coreTemp = NvidiaGPU::GetTemperature();
-            return out;
-        }
-#endif
 #ifdef WITH_AMD
         if (RuntimeConfig::Get().hasAMD)
         {
@@ -195,16 +185,6 @@ namespace System
 
     VRAMInfo GetVRAMInfo()
     {
-#ifdef WITH_NVIDIA
-        if (RuntimeConfig::Get().hasNvidia)
-        {
-            NvidiaGPU::VRAM vram = NvidiaGPU::GetVRAM();
-            VRAMInfo out;
-            out.totalGiB = (double)vram.totalB / (1024 * 1024 * 1024);
-            out.usedGiB = out.totalGiB - ((double)vram.freeB / (1024 * 1024 * 1024));
-            return out;
-        }
-#endif
 #ifdef WITH_AMD
         if (RuntimeConfig::Get().hasAMD)
         {
