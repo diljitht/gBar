@@ -32,8 +32,18 @@ namespace Workspaces
             LOG("Error: Called Go to workspace, but Workspaces isn't open!");
             return;
         }
-        LOG("Switching workspace: hyprctl dispatch workspace " << workspace);
-        system(("hyprctl dispatch workspace " + std::to_string(workspace)).c_str());
+
+        // Hyprland >= 0.55 interprets the dispatch payload as a Lua call, so the old
+        // "hyprctl dispatch workspace <n>" form no longer switches workspaces.
+        // Use the Lua dispatcher, falling back to the legacy form for older versions.
+        std::string newCmd = "hyprctl dispatch 'hl.dsp.focus({ workspace = " + std::to_string(workspace) + " })'";
+        std::string legacyCmd = "hyprctl dispatch workspace " + std::to_string(workspace);
+        LOG("Switching workspace: " << newCmd);
+        if (system(newCmd.c_str()) != 0)
+        {
+            LOG("New dispatch syntax failed, falling back to: " << legacyCmd);
+            system(legacyCmd.c_str());
+        }
     }
 
     // direction: + or -
@@ -44,9 +54,20 @@ namespace Workspaces
         {
             scrollOp = 'm';
         }
-        std::string cmd = std::string("hyprctl dispatch workspace ") + scrollOp + direction + "1";
-        LOG("Switching workspace: " << cmd.c_str());
-        system(cmd.c_str());
+        std::string workspaceRef = std::string("e") + direction + "1";
+        std::string newCmd = std::string("hyprctl dispatch 'hl.dsp.focus({ workspace = \"") + workspaceRef + "\"";
+        if (scrollOp == 'm')
+        {
+            newCmd += ", on_current_monitor = true";
+        }
+        newCmd += " })'";
+        std::string legacyCmd = std::string("hyprctl dispatch workspace ") + scrollOp + direction + "1";
+        LOG("Switching workspace: " << newCmd);
+        if (system(newCmd.c_str()) != 0)
+        {
+            LOG("New dispatch syntax failed, falling back to: " << legacyCmd);
+            system(legacyCmd.c_str());
+        }
     }
 }
 #endif
