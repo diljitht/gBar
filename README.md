@@ -37,35 +37,6 @@ For Arch systems, gBar can be found on the AUR.
 You can install it e.g.: with yay
 ```yay -S gbar-git```
 
-## Building and installation (Nix)
-If you choose the Nix/NixOS installation there are a couple of ways to do it but they all require you to have flakes enabled.
-- Building it seperately and just running the binary, run nix build in the directory and use the binary from ./result/bin
-- Import the flake to inputs and then add `gBar.defaultPackage.x86_64-linux` to either environment.systemPackages or home.packages.
-- Use the home manager module. This is done by, as in the previous way, importing the flake and then adding `gBar.homeManagerModules.x86_64-linux.default` into your home-manager imorts section. This exposes the option programs.gBar to home-manager, use it like below.
-```nix
-# Inputs section
-inputs.gBar.url = "github:scorpion-26/gBar";
-...
-# Inside home config
-home-manager.users.user = {
-    ...
-    imports = [ inputs.gBar.homeManagerModules.x86_64-linux.default ];
-    ...
-    programs.gBar = {
-        enable = true;
-        config = {
-            Location = "L";
-            EnableSNI = true;
-            SNIIconSize = {
-                Discord = 26;
-                OBS = 23;
-            };
-            WorkspaceSymbols = [ " " " " ];
-        };
-    };
-};
-```
-
 ## Running gBar
 *Open bar on monitor "DP-1"*
 ```

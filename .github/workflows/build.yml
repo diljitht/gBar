@@ -31,18 +31,3 @@ jobs:
       - name: Build gBar
         run: |
           ninja -C build
-  nix:
-    name: Build using Nix
-    runs-on: ubuntu-latest
-    steps:
-      - name: Install Nix
-        uses: cachix/install-nix-action@v20
-
-      - name: Download gBar
-        uses: actions/checkout@v3.3.0
-        with:
-          submodules: recursive
-
-      - name: Build Nix flake
-        run: |
-          nix build --print-build-logs
