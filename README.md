@@ -10,6 +10,7 @@ Compared with upstream [`03bedc7`](https://github.com/scorpion-26/gBar/commit/03
 
 ### Features and behavior
 
+- **Background transparency:** The bar background uses 85% opacity without dimming text or icons. Adjust `$bar-opacity` in `style.scss` (`0` = transparent, `1` = opaque), or the alpha in the `.bar` RGBA color in `style.css`. This also affects audio fly-ins, which share the `.bar` class; tooltips and menus remain opaque. Existing custom themes need the same background rule to enable transparency.
 - **Clock hover:** An optional animated additional date/time label appears on hover while the normal clock stays visible. `TimeFullOnHover` defaults to `false`; `DateTimeStyleFull` controls the additional label.
 - **Hyprland scratchpads:** Special workspaces appear as named buttons in a separate group. Clicking toggles the scratchpad, and long names do not stretch regular workspace buttons. Requires `UseHyprlandIPC: true`.
 - **Workspace commands:** Lua-style `hl.dsp` commands are attempted first, with legacy command fallback on failure, for compatibility with newer Hyprland versions.

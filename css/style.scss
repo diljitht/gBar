@@ -1,6 +1,7 @@
 // colorscheme(dracula)
 // See https://github.com/dracula/dracula-theme/blob/master/LICENSE or dracula/LICENSE for the license
 $bg: #282a36;
+$bar-opacity: 0.85; // 0 = transparent, 1 = opaque; background only.
 $fg: #f8f8f2;
 $inactive: #44475a;
 $darkblue: #6272a4;
@@ -59,6 +60,10 @@ menu menuitem:selected {
 .bar,tooltip{
     background-color: $bg;
     border-radius: 16px;
+}
+
+.bar {
+    background-color: rgba($bg, $bar-opacity);
 }
 
 .right {
