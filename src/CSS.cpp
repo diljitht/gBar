@@ -12,6 +12,7 @@
 namespace CSS
 {
     static GtkCssProvider* sProvider;
+    static std::string loadedPath;
 
 #ifdef WITH_LIBSASS
     bool CompileAndLoadSCSS(const std::string& scssFile)
@@ -121,6 +122,7 @@ namespace CSS
             {
                 if (CompileAndLoadSCSS(dir + "/style.scss"))
                 {
+                    loadedPath = dir + "/style.scss";
                     LOG("SCSS found and loaded successfully!");
                     return;
                 }
@@ -133,6 +135,7 @@ namespace CSS
 
             if (LoadCSS(dir + "/style.css"))
             {
+                loadedPath = dir + "/style.css";
                 LOG("CSS found and loaded successfully!");
                 return;
             }
@@ -143,5 +146,10 @@ namespace CSS
     GtkCssProvider* GetProvider()
     {
         return sProvider;
+    }
+
+    const std::string& GetLoadedPath()
+    {
+        return loadedPath;
     }
 }

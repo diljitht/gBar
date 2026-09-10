@@ -101,6 +101,7 @@ public:
 
     static void Load(const std::string& overrideConfigLocation);
     static const Config& Get();
+    static const std::string& GetLoadedPath();
 };
 
 // Configs, that rely on specific files to be available(e.g. BlueZ running)

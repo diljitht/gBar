@@ -6,10 +6,16 @@
 #include <cmath>
 
 static Config config;
+static std::string loadedConfigPath;
 
 const Config& Config::Get()
 {
     return config;
+}
+
+const std::string& Config::GetLoadedPath()
+{
+    return loadedConfigPath;
 }
 
 void PrintLegacyVariable(const std::string_view& oldName, const std::string_view& newName)
@@ -243,20 +249,20 @@ void AddConfigVar(const std::string& propertyName, MapLike& propertyToSet, std::
 void Config::Load(const std::string& overrideConfigLocation)
 {
     const char* xdgConfigHome = getenv("XDG_CONFIG_HOME");
-    std::ifstream file;
     if (overrideConfigLocation != "")
     {
-        file = std::ifstream(overrideConfigLocation + "/config");
+        loadedConfigPath = overrideConfigLocation + "/config";
     }
     else if (xdgConfigHome)
     {
-        file = std::ifstream(std::string(xdgConfigHome) + "/gBar/config");
+        loadedConfigPath = std::string(xdgConfigHome) + "/gBar/config";
     }
     else
     {
-        std::string home = getenv("HOME");
-        file = std::ifstream(home + "/.config/gBar/config");
+        const char* home = getenv("HOME");
+        loadedConfigPath = home ? std::string(home) + "/.config/gBar/config" : "";
     }
+    std::ifstream file(loadedConfigPath);
     if (!file.is_open())
     {
         LOG("Failed opening config!");

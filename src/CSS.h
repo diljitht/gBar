@@ -6,4 +6,5 @@ namespace CSS
 {
     void Load(const std::string& overrideConfigLocation);
     GtkCssProvider* GetProvider();
+    const std::string& GetLoadedPath();
 }

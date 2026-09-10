@@ -6,20 +6,123 @@
 #include "BluetoothDevices.h"
 #include "Plugin.h"
 #include "Config.h"
+#include "CSS.h"
 
+#include <gio/gio.h>
 #include <cmath>
 #include <cstdio>
 #include <cerrno>
+#include <climits>
 #include <csignal>
 #include <cstring>
 #include <fcntl.h>
+#include <filesystem>
 #include <pthread.h>
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <unordered_set>
+#include <vector>
 
 static volatile sig_atomic_t shutdownSignal = 0;
 static int lockFd = -1;
+static constexpr const char* reloadLockFdEnv = "GBAR_RELOAD_LOCK_FD";
+
+struct ReloadContext
+{
+    char** argv;
+    guint debounceSource = 0;
+    std::vector<GFileMonitor*> monitors;
+    std::unordered_set<std::string> watchedPaths;
+};
+
+static gboolean ReloadProcess(void* data)
+{
+    ReloadContext& context = *(ReloadContext*)data;
+    context.debounceSource = 0;
+    LOG("Config or style changed; reloading gBar.");
+    std::cout.flush();
+
+    int descriptorFlags = -1;
+    if (lockFd >= 0)
+    {
+        descriptorFlags = fcntl(lockFd, F_GETFD);
+        if (descriptorFlags < 0 || fcntl(lockFd, F_SETFD, descriptorFlags & ~FD_CLOEXEC) != 0
+            || setenv(reloadLockFdEnv, std::to_string(lockFd).c_str(), 1) != 0)
+        {
+            LOG("Failed to preserve widget lock while reloading: " << std::strerror(errno));
+            if (descriptorFlags >= 0)
+                fcntl(lockFd, F_SETFD, descriptorFlags);
+            unsetenv(reloadLockFdEnv);
+            return G_SOURCE_REMOVE;
+        }
+    }
+    execvp(context.argv[0], context.argv);
+    if (descriptorFlags >= 0)
+        fcntl(lockFd, F_SETFD, descriptorFlags);
+    unsetenv(reloadLockFdEnv);
+    LOG("Failed to reload gBar: " << std::strerror(errno));
+    return G_SOURCE_REMOVE;
+}
+
+static void OnWatchedFileChanged(GFileMonitor*, GFile*, GFile*, GFileMonitorEvent event, void* data)
+{
+    switch (event)
+    {
+    case G_FILE_MONITOR_EVENT_CHANGED:
+    case G_FILE_MONITOR_EVENT_CHANGES_DONE_HINT:
+    case G_FILE_MONITOR_EVENT_DELETED:
+    case G_FILE_MONITOR_EVENT_CREATED:
+    case G_FILE_MONITOR_EVENT_ATTRIBUTE_CHANGED:
+    case G_FILE_MONITOR_EVENT_MOVED:
+    case G_FILE_MONITOR_EVENT_RENAMED:
+    case G_FILE_MONITOR_EVENT_MOVED_IN:
+    case G_FILE_MONITOR_EVENT_MOVED_OUT:
+        break;
+    default: return;
+    }
+
+    ReloadContext& context = *(ReloadContext*)data;
+    if (context.debounceSource)
+        g_source_remove(context.debounceSource);
+    // Editors commonly write through a temporary file and rename it. Wait until
+    // the sequence settles before reading the config or compiling SCSS again.
+    context.debounceSource = g_timeout_add(250, ReloadProcess, &context);
+}
+
+static void WatchFile(ReloadContext& context, const std::string& path)
+{
+    if (path.empty())
+        return;
+
+    std::error_code pathError;
+    std::filesystem::path absolutePath = std::filesystem::absolute(path, pathError).lexically_normal();
+    std::string watchedPath = pathError ? path : absolutePath.string();
+    if (!context.watchedPaths.insert(watchedPath).second)
+        return;
+
+    GFile* file = g_file_new_for_path(watchedPath.c_str());
+    GError* error = nullptr;
+    GFileMonitor* monitor = g_file_monitor_file(file, G_FILE_MONITOR_WATCH_MOVES, nullptr, &error);
+    g_object_unref(file);
+    if (!monitor)
+    {
+        LOG("Cannot watch " << watchedPath << ": " << (error ? error->message : "unknown error"));
+        if (error)
+            g_error_free(error);
+    }
+    else
+    {
+        g_signal_connect(monitor, "changed", G_CALLBACK(OnWatchedFileChanged), &context);
+        context.monitors.push_back(monitor);
+        LOG("Watching for changes: " << watchedPath);
+    }
+
+    // A file monitor on a symlink does not see atomic replacement of its target.
+    std::filesystem::path resolvedPath = std::filesystem::canonical(watchedPath, pathError);
+    if (!pathError && resolvedPath != absolutePath)
+        WatchFile(context, resolvedPath.string());
+}
 
 void OpenAudioFlyin(Window& window, const std::string& monitor, AudioFlyin::Type type)
 {
@@ -195,7 +298,39 @@ int main(int argc, char** argv)
             LOG("XDG_RUNTIME_DIR must be a private directory owned by the current user.");
             return 1;
         }
-        lockFd = openat(dirFd, lockName, O_RDWR | O_CREAT | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK, 0600);
+
+        // A reload inherits the already-locked open file description. Verify
+        // that it still names this widget's lock before reusing it.
+        bool reusedLock = false;
+        const char* inheritedValue = getenv(reloadLockFdEnv);
+        if (inheritedValue)
+        {
+            char* end = nullptr;
+            errno = 0;
+            long inheritedFd = std::strtol(inheritedValue, &end, 10);
+            struct stat pathInfo = {};
+            if (errno == 0 && end != inheritedValue && *end == '\0' && inheritedFd >= 0 && inheritedFd <= INT_MAX
+                && fstat((int)inheritedFd, &info) == 0
+                && fstatat(dirFd, lockName, &pathInfo, AT_SYMLINK_NOFOLLOW) == 0
+                && S_ISREG(info.st_mode) && info.st_uid == geteuid() && info.st_nlink == 1
+                && info.st_dev == pathInfo.st_dev && info.st_ino == pathInfo.st_ino
+                && flock((int)inheritedFd, LOCK_EX | LOCK_NB) == 0)
+            {
+                lockFd = (int)inheritedFd;
+                int flags = fcntl(lockFd, F_GETFD);
+                reusedLock = flags >= 0 && fcntl(lockFd, F_SETFD, flags | FD_CLOEXEC) == 0;
+            }
+            unsetenv(reloadLockFdEnv);
+            if (!reusedLock)
+            {
+                close(dirFd);
+                LOG("Cannot validate inherited widget lock.");
+                return 1;
+            }
+        }
+
+        if (!reusedLock)
+            lockFd = openat(dirFd, lockName, O_RDWR | O_CREAT | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK, 0600);
         int openError = errno;
         close(dirFd);
         if (lockFd < 0)
@@ -249,6 +384,9 @@ int main(int argc, char** argv)
     }
 
     window.Init(overrideConfigLocation);
+    ReloadContext reloadContext{argv, 0, {}, {}};
+    WatchFile(reloadContext, Config::GetLoadedPath());
+    WatchFile(reloadContext, CSS::GetLoadedPath());
     window.OnWidget = [&]()
     {
         CreateWidget(widget, window);
@@ -268,6 +406,13 @@ int main(int argc, char** argv)
     window.Run();
 
     g_source_remove(shutdownSource);
+    if (reloadContext.debounceSource)
+        g_source_remove(reloadContext.debounceSource);
+    for (GFileMonitor* monitor : reloadContext.monitors)
+    {
+        g_file_monitor_cancel(monitor);
+        g_object_unref(monitor);
+    }
     System::FreeResources();
     // Never unlink flock files: another process may already have opened the inode.
     // Closing our descriptor (also automatic on abnormal exit) releases only our lock.
